@@ -22,7 +22,7 @@ const G_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") || "";
 const REDIRECT = SB_URL.replace(/\/$/, "") + "/functions/v1/mailscan/callback";
 const APP_URL = "https://sarthakd7.github.io/momentum-planner/";
 const TZ = "Asia/Kolkata";
-const MAX_MSGS = 60, MAX_CHARS = 7000, BATCH = 6, BUDGET_MS = 100_000; // stay well under the 150 s limit
+const MAX_MSGS = 60, MAX_CHARS = 7000, BATCH = 6, BUDGET_MS = 80_000; // stay well under the 150 s limit
 const db = createClient(SB_URL, SERVICE, { auth: { persistSession: false } });
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
@@ -35,27 +35,49 @@ function aiProvider() {
   if (Deno.env.get("OPENAI_API_KEY")) return "openai";
   return "";
 }
-async function ai(prompt: string): Promise<string> {
-  const p = aiProvider(), model = Deno.env.get("MAIL_AI_MODEL");
+// One call to the provider; errors carry the HTTP status so busy/overloaded replies can be retried
+async function aiOnce(p: string, model: string | undefined, prompt: string): Promise<string> {
+  const fail = (r: Response, d: any) => Object.assign(new Error("AI " + r.status + ": " + (d?.error?.message || r.statusText)), { status: r.status });
   if (p === "anthropic") {
     const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({ model: model || "claude-sonnet-5-5", max_tokens: 4000, system: "Reply with one JSON object only.", messages: [{ role: "user", content: prompt }] }) });
-    const d = await r.json(); if (!r.ok) throw new Error("AI " + r.status + ": " + (d.error?.message || ""));
+    const d = await r.json().catch(() => null); if (!r.ok) throw fail(r, d);
     return (d.content || []).map((b: any) => b.text || "").join("");
   }
   if (p === "gemini") {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-flash-latest"}:generateContent`, { method: "POST", headers: { "x-goog-api-key": Deno.env.get("GEMINI_API_KEY")!, "content-type": "application/json" },
       body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4000 } }) });
-    const d = await r.json(); if (!r.ok) throw new Error("AI " + r.status + ": " + (d.error?.message || ""));
+    const d = await r.json().catch(() => null); if (!r.ok) throw fail(r, d);
     return (d.candidates?.[0]?.content?.parts || []).map((x: any) => x.text || "").join("");
   }
   if (p === "openai") {
     const r = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { Authorization: "Bearer " + Deno.env.get("OPENAI_API_KEY"), "content-type": "application/json" },
       body: JSON.stringify({ model: model || "gpt-6-luna", response_format: { type: "json_object" }, messages: [{ role: "system", content: "Reply with one JSON object only." }, { role: "user", content: prompt }] }) });
-    const d = await r.json(); if (!r.ok) throw new Error("AI " + r.status + ": " + (d.error?.message || ""));
+    const d = await r.json().catch(() => null); if (!r.ok) throw fail(r, d);
     return d.choices?.[0]?.message?.content || "";
   }
   throw new Error("No AI key set in Supabase secrets.");
+}
+
+// Retries when the provider is busy (429/5xx), and on Gemini falls back to the lighter model
+const FALLBACK: Record<string, string[]> = { gemini: ["gemini-flash-latest", "gemini-3.5-flash-lite"], anthropic: ["claude-sonnet-5-5", "claude-haiku-5-5"], openai: ["gpt-6-luna"] };
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+async function ai(prompt: string): Promise<string> {
+  const p = aiProvider(), set = Deno.env.get("MAIL_AI_MODEL");
+  const models = set ? [set, ...(FALLBACK[p] || []).filter(m => m !== set)] : (FALLBACK[p] || [undefined as any]);
+  let last: any;
+  for (const m of models) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { return await aiOnce(p, m, prompt); }
+      catch (e: any) {
+        last = e;
+        const busy = e.status === 429 || (e.status >= 500 && e.status < 600);
+        if (!busy) throw e;              // bad key, bad request: no point retrying
+        if (attempt < 2) await sleep(attempt ? 6000 : 2000);
+      }
+    }
+  }
+  throw last;
 }
 function parseJSON(t: string) {
   try { return JSON.parse(t); } catch {}
@@ -204,15 +226,15 @@ async function scanOne(link: any) {
     if (late()) { more = true; break; }
     const chunk = mails.slice(i, i + BATCH);
     try { found.push(...await extract(chunk)); for (const m of chunk) processed.add(m.id); }
-    catch (e: any) { aiFailed = e.message; console.error("extract failed", e); }  // leave these unprocessed so the next run retries
+    catch (e: any) { aiFailed = e.message; more = true; console.error("extract failed", e); }  // leave these unprocessed so the next run retries
   }
   const added = await mergeFinds(owner, found);
   const list = [...processed].slice(-500);
   const result = aiFailed && !added.length
-    ? `Read ${mails.length} new email${mails.length === 1 ? "" : "s"}, but the AI step failed: ${aiFailed.slice(0, 160)}`
+    ? `Read ${mails.length} new email${mails.length === 1 ? "" : "s"}, but the AI step failed: ${aiFailed.slice(0, 160).replace(/\.?$/, ".")}`
     : mails.length ? `Read ${mails.length} new email${mails.length === 1 ? "" : "s"}, added ${added.length} item${added.length === 1 ? "" : "s"}${added.length ? ": " + added.slice(0, 3).map(x => x.title).join(", ") : ""}.`
     : "No new emails.";
-  const resultFull = more ? result + " More to go; the next scan continues." : result;
+  const resultFull = aiFailed ? result + " These emails will be retried on the next scan." : more ? result + " More to go; the next scan continues." : result;
   // only move the scan window forward once everything up to now has been read
   await db.rpc("mail_link_update", { p_owner: owner, p_processed: list, p_result: resultFull, p_scanned: !more });
   return { owner, read: mails.length, added: added.length, result: resultFull };
