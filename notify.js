@@ -92,7 +92,9 @@ async function render(el) {
        ${ck("d", "deadline", "Deadlines 24 hours ahead", "From the Brief.")}
        <div class="note">Time zone: ${esc(p.tz)}</div>`) +
     grp("Account", "", `<div class="note">Signed in as <b>${esc(user?.email || "")}</b>. Your planner syncs to every device signed in with this email.</div>
-       <button type="button" class="btn danger" data-mpn="signout" style="align-self:flex-start">Sign out on this device</button>`);
+       <label class="field">New password<input type="password" id="mpnPw" autocomplete="new-password" minlength="8" placeholder="8+ characters"></label>
+       <div class="chiprow"><button type="button" class="btn" data-mpn="pw">Set password</button><button type="button" class="btn danger" data-mpn="signout">Sign out on this device</button></div>
+       <div class="note" id="mpnPwMsg">Set a password here, then sign in on your other devices with your email and this password. No email needed.</div>`);
 
   const say = (t, bad) => { const s = el.querySelector("#mpnStatus"); if (s) { s.textContent = t; s.style.color = bad ? "var(--warn)" : ""; } };
   el.onclick = async e => {
@@ -102,6 +104,14 @@ async function render(el) {
       if (b.dataset.mpn === "on") { say("Turning on…"); await enable(); await render(el); say("On for this device. Try “Send a test”."); }
       else if (b.dataset.mpn === "off") { await disable(); await render(el); }
       else if (b.dataset.mpn === "test") { say("Sending…"); const r = await call("test"); say(r.delivered ? `Sent to ${r.delivered} device${r.delivered === 1 ? "" : "s"}. It should appear in a few seconds.` : "Couldn't reach this device. Turn reminders off and on again.", !r.delivered); }
+      else if (b.dataset.mpn === "pw") {
+        const f = el.querySelector("#mpnPw"), m = el.querySelector("#mpnPwMsg");
+        if (f.value.length < 8) { m.textContent = "Use at least 8 characters."; m.style.color = "var(--warn)"; f.focus(); return; }
+        const { error } = await SB.auth.updateUser({ password: f.value });
+        f.value = "";
+        m.style.color = error ? "var(--warn)" : "var(--good)";
+        m.textContent = error ? error.message : "Password set. Sign in on your other devices with your email and this password.";
+      }
       else if (b.dataset.mpn === "signout") {
         if (DB.pending && DB.pending() && !confirm("Some changes haven't synced yet and will be lost. Sign out anyway?")) return;
         await disable().catch(() => {});

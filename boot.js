@@ -29,7 +29,10 @@
   .mp-auth input{height:42px;border-radius:10px;border:1px solid var(--line,#D9DFE6);background:var(--surface,#fff);color:inherit;padding:0 12px;font:inherit}
   .mp-auth button{height:42px;border-radius:10px;border:0;background:var(--accent,#2B59D9);color:var(--accent-ink,#fff);font:inherit;font-weight:700;cursor:pointer}
   .mp-auth button.link{background:none;color:var(--accent,#2B59D9);height:auto;padding:4px}
+  .mp-auth button.ghost{background:none;color:var(--accent,#2B59D9);border:1px solid var(--line,#D9DFE6)}
+  .mp-auth .row{display:flex;gap:8px}.mp-auth .row button{flex:1}
   .mp-auth .msg{font-size:13px;font-weight:600}
+  .mp-auth .msg:empty{display:none}
   .mp-auth .msg.bad{color:var(--warn,#B4441F)}`;
 
   function sheet(supabase) {
@@ -37,20 +40,40 @@
     const wrap = document.createElement("div"); wrap.className = "mp-auth";
     wrap.innerHTML = `<form>
       <h2>Sign in to sync</h2>
-      <p>Enter your email. We'll send a link; open it on this device to sign in. Use the same email on your phone and laptop.</p>
-      <input type="email" name="email" autocomplete="email" required placeholder="you@example.com">
-      <button type="submit">Email me a sign-in link</button>
+      <p>Use the same email and password on your phone and laptop.</p>
+      <input type="email" name="email" autocomplete="username" required placeholder="you@example.com">
+      <input type="password" name="password" autocomplete="current-password" minlength="8" placeholder="Password (8+ characters)">
+      <div class="row"><button type="submit" data-mode="in">Sign in</button><button type="submit" class="ghost" data-mode="up">Create account</button></div>
       <div class="msg" role="status"></div>
+      <button type="button" class="link" data-link>Email me a sign-in link instead</button>
       <button type="button" class="link" data-local>Use without sync on this device</button>
     </form>`;
     const form = wrap.querySelector("form"), msg = wrap.querySelector(".msg");
+    const say = (t, bad) => { msg.className = "msg" + (bad ? " bad" : ""); msg.textContent = t; };
+    const friendly = m => /invalid login/i.test(m) ? "Email or password is wrong. New here? Use “Create account”."
+      : /already registered|already exists/i.test(m) ? "That email already has an account. Use “Sign in”."
+      : /rate limit/i.test(m) ? "Too many emails sent this hour. Use your password instead, or try the link again later."
+      : m;
     form.addEventListener("submit", async e => {
       e.preventDefault();
+      const mode = (e.submitter && e.submitter.dataset.mode) || "in";
+      const email = form.email.value.trim(), password = form.password.value;
+      if (password.length < 8) { say("Enter a password of at least 8 characters.", true); form.password.focus(); return; }
+      say(mode === "up" ? "Creating your account…" : "Signing in…");
+      const { data, error } = mode === "up"
+        ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } })
+        : await supabase.auth.signInWithPassword({ email, password });
+      if (error) { say(friendly(error.message), true); return; }
+      if (mode === "up" && !data.session) say("Account created. Check your inbox to confirm your email, then sign in.");
+      // with a session, onAuthStateChange closes this sheet
+    });
+    wrap.querySelector("[data-link]").addEventListener("click", async () => {
       const email = form.email.value.trim();
-      msg.className = "msg"; msg.textContent = "Sending…";
-      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
-      if (error) { msg.className = "msg bad"; msg.textContent = error.message; return; }
-      msg.textContent = "Check your inbox and open the link. This page will update once you're signed in.";
+      if (!form.email.checkValidity() || !email) { say("Enter your email first.", true); form.email.focus(); return; }
+      say("Sending…");
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: false } });
+      if (error) { say(/signups not allowed|not found/i.test(error.message) ? "No account for that email yet. Use “Create account”." : friendly(error.message), true); return; }
+      say("Check your inbox and open the link on this device.");
     });
     wrap.querySelector("[data-local]").addEventListener("click", () => { wrap.remove(); resolveDb(null); });
     document.body.appendChild(wrap);
