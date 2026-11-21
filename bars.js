@@ -64,12 +64,15 @@ async function sync() {
   }
   if (my !== busy) return;
   const c = hex(rgb);
-  if (c === last) return;            // unchanged: don't touch the page (that would wake the watcher below again)
   last = c;
-  meta.setAttribute("content", c);
-  document.documentElement.style.setProperty("--sysbar", c);
+  if (meta.getAttribute("content") !== c) meta.setAttribute("content", c);
+  // only touch the page when the colour changed (setting it wakes the watcher below)
+  if (document.documentElement.style.getPropertyValue("--sysbar") !== c) document.documentElement.style.setProperty("--sysbar", c);
 }
 let last = "";
+// The app also writes this colour (its accent colour) whenever settings apply; put ours back each time.
+new MutationObserver(() => { if (last && meta.getAttribute("content") !== last) meta.setAttribute("content", last); })
+  .observe(meta, { attributes: true, attributeFilter: ["content"] });
 
 let t = 0;
 const later = () => { clearTimeout(t); t = setTimeout(sync, 120); };
