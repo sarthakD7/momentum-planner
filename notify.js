@@ -92,6 +92,7 @@ async function render(el) {
        ${ck("d", "deadline", "Deadlines 24 hours ahead", "From the Brief.")}
        <div class="note">Time zone: ${esc(p.tz)}</div>`) +
     grp("Account", "", `<div class="note">Signed in as <b>${esc(user?.email || "")}</b>. Your planner syncs to every device signed in with this email.</div>
+       <div class="note">App version ${esc(window.mpVersion || "?")} · display ${esc(matchMedia("(display-mode: standalone)").matches ? "installed app" : "browser tab")} · bar colour ${esc(document.querySelector('meta[name="theme-color"]')?.content || "")}</div>
        <label class="field">New password<input type="password" id="mpnPw" autocomplete="new-password" minlength="8" placeholder="8+ characters"></label>
        <div class="chiprow"><button type="button" class="btn" data-mpn="pw">Set password</button><button type="button" class="btn danger" data-mpn="signout">Sign out on this device</button></div>
        <div class="note" id="mpnPwMsg">Set a password here, then sign in on your other devices with your email and this password. No email needed.</div>`);
