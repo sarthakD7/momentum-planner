@@ -3195,7 +3195,7 @@ function dashTasksHTML() {
     return `<button type="button" data-act="dtab" data-k="${k}" aria-pressed="${k === cur}">${names[k]} ${count(k) || ""}</button>`;
   };
   return `<article class="tile span2 static" aria-label="Tasks"><header><h3>${ic("check", 15)}Tasks</h3><div class="seg dtabs" role="group" aria-label="Task list">${Object.keys(names).map(tabBtn).join("")}</div></header>
-    ${cur === "today" || cur === "tomorrow" ? progBarHTML(L, { emptyText: `Nothing for ${names[cur].toLowerCase()} yet` }) : ""}
+    ${cur === "today" || cur === "tomorrow" ? progBarHTML(L, { strip: true }) : ""}
     <div class="sec" ${cur !== "overdue" ? `data-drop="list" data-list="${cur}"` : ""}>
       ${cur !== "overdue" ? `<div class="addrow"><input data-add="${cur}" placeholder="${ph[cur]}" autocomplete="off" enterkeyhint="done"></div><div class="nlhint" data-hint="${cur}"></div>` : (L.length ? `<button class="linkbtn" data-act="overdue-today">Move all ${L.length} to today</button>` : "")}
       <div class="list">${L.length ? L.slice(0, max).map(x => cardHTML(x, cur === "overdue" ? "overdue" : cur)).join("") : `<div class="empty">${cur === "overdue" ? "Nothing overdue. Nice." : cur === "inbox" ? "Nothing parked. Tasks without a day land here." : `Nothing for ${names[cur].toLowerCase()} yet.`}</div>`}</div>
@@ -4770,4 +4770,16 @@ init();
 </script>
 
 </body></html>
+<style id="phone-fit">
+/* Phones: drop the outer frame around the dashboard so tiles use the full width, and trim nested padding */
+@media (max-width:760px){
+  .app{padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px));padding-bottom:8px}
+  .pane:has(> .scroll > .sgrid){border:0;background:transparent;border-radius:0;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+  .sgrid{padding:2px 0 12px;gap:10px}
+  .tile{padding:12px 12px 14px;border-radius:14px}
+  .nn{gap:8px}
+  .nnc{padding:10px 12px}
+  .top{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+}
+</style>
 <script>if("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW", e)));</script>
