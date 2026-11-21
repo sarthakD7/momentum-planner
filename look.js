@@ -46,7 +46,8 @@ body:not([data-view="stats"]) .acct{display:none}
 }
 /* no background blur behind pills while they animate: much smoother */
 .scrim.pillpop{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
-.scrim.pillpop>.sheet{will-change:clip-path}
+.scrim.pillpop>.sheet{will-change:clip-path;position:relative;z-index:1}
+.pillshadow{position:fixed;z-index:0;pointer-events:none;box-shadow:0 20px 60px -12px rgba(0,0,0,.55)}
 /* menu highlight: a softer glide, no bounce */
 .nind{transition:transform .5s cubic-bezier(.32,.72,0,1),width .45s cubic-bezier(.32,.72,0,1),height .45s cubic-bezier(.32,.72,0,1),opacity .25s ease!important;will-change:transform}
 @media (prefers-reduced-motion:reduce){.nind{transition:opacity .2s!important}}
@@ -219,6 +220,18 @@ function fadeKids(sheet, show) {
     show ? { duration: 340, delay: 150 + Math.min(i, 8) * 28, easing: EASE_OUT, fill: "backwards" } : { duration: 150, easing: "ease-in", fill: "forwards" }));
 }
 
+// The pill's shadow lives on its own layer that follows the opening shape frame by frame
+// (the sheet's own shadow is cut off by the clip while it animates, then would pop in at the end).
+function shadowLayer(scrim, from, to, r0, r1, timing, closing) {
+  const d = document.createElement("div");
+  d.className = "pillshadow";
+  scrim.insertBefore(d, scrim.firstChild);
+  const box = (r, rad, op) => ({ left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px", borderRadius: rad + "px", opacity: op });
+  const a = d.animate([box(from, r0, closing ? 1 : 0), box(to, r1, closing ? 0 : 1)], { ...timing, fill: "forwards" });
+  a.onfinish = a.oncancel = () => d.remove();
+  return d;
+}
+
 function grow(scrim) {
   const o = origin; origin = null;
   if (!o || Date.now() - o.at > 800) return false;
@@ -230,7 +243,9 @@ function grow(scrim) {
   scrim.style.setProperty("--popR", Math.max(12, innerWidth - o.rect.right) + "px");
   if (calm()) return true;
   const s = sheet.getBoundingClientRect();
-  sheet.animate([{ clipPath: insetTo(s, o.rect, Math.min(o.rect.height / 2, 24)) }, { clipPath: "inset(0px 0px 0px 0px round 28px)" }], { duration: 500, easing: EASE_OUT });
+  const r0 = Math.min(o.rect.height / 2, 24), timing = { duration: 500, easing: EASE_OUT };
+  sheet.animate([{ clipPath: insetTo(s, o.rect, r0) }, { clipPath: "inset(0px 0px 0px 0px round 28px)" }], timing);
+  shadowLayer(scrim, o.rect, s, r0, 28, timing, false);
   fadeKids(sheet, true);
   scrim.animate([{ backgroundColor: "rgba(8,12,18,0)" }, { backgroundColor: getComputedStyle(scrim).backgroundColor }], { duration: 400, easing: "ease-out" });
   return true;
@@ -263,8 +278,10 @@ function shrink(scrim) {
   if (pill) {
     const s = sheet.getBoundingClientRect(), b = btn.getBoundingClientRect();
     fadeKids(sheet, false);
-    a = sheet.animate([{ clipPath: "inset(0px 0px 0px 0px round 28px)" }, { clipPath: insetTo(s, b, Math.min(b.height / 2, 24)) }],
-      { duration: 380, easing: EASE_IN_OUT, fill: "forwards" });
+    const r1 = Math.min(b.height / 2, 24), timing = { duration: 380, easing: EASE_IN_OUT };
+    sheet.style.boxShadow = "none";   // the shadow layer takes over while it closes
+    a = sheet.animate([{ clipPath: "inset(0px 0px 0px 0px round 28px)" }, { clipPath: insetTo(s, b, r1) }], { ...timing, fill: "forwards" });
+    shadowLayer(scrim, s, b, 28, r1, timing, true);
   } else {
     a = sheet.animate(!wide()
       ? [{ transform: "none", opacity: 1 }, { transform: "translateY(40px)", opacity: 0 }]
