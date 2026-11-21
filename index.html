@@ -4863,10 +4863,18 @@ init();
   .card[data-dir="l"]::after{right:-100px;color:var(--tmrw);background:var(--tmrw-soft)}
   .card.swipe-go::after{opacity:1}
 
-  /* Bottom menu pill: icons only (labels stay for screen readers) */
+  /* Bottom menu pill: icons at their usual size; only the selected menu shows its name
+     (the other names stay available to screen readers) */
   .bnav button span{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-  .bnav button{min-height:44px;padding:0!important;justify-content:center}
-  .bnav button svg{width:23px;height:23px}
+  .bnav button[aria-pressed="true"] span{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;font-size:11px}
+  .bnav button{min-height:42px;justify-content:center}
+}
+/* Touch screens (phones and tablets): no blue tap squares or focus rings on tap, and no scrollbar on scrolling areas */
+@media (pointer:coarse){
+  *{-webkit-tap-highlight-color:transparent}
+  .bnav button:focus,.bnav button:focus-visible,.rail button:focus,.rail button:focus-visible,.tab:focus,.tab:focus-visible{outline:none}
+  .scroll,.bnav,.sheet,.setbody,.setpanes{scrollbar-width:none}
+  .scroll::-webkit-scrollbar,.sheet::-webkit-scrollbar,.setbody::-webkit-scrollbar,.setpanes::-webkit-scrollbar{display:none}
 }
 .nn-slim{display:none}
 @media (max-width:760px){.nn-slim{display:flex}}
