@@ -2430,7 +2430,7 @@ function syncMode() {
 }
 function placeNavInd() {
   ["#rail", "#bnav"].forEach(sel => {
-    const nav = $(sel); if (!nav || !nav.offsetParent) return;
+    const nav = $(sel); if (!nav || !nav.getClientRects().length) return;   // offsetParent is null for the floating (fixed) phone menu
     const ind = nav.querySelector(".nind"), b = nav.querySelector('button[aria-pressed="true"]'); if (!ind) return;
     if (!b) { ind.style.opacity = "0"; return; }
     ind.style.opacity = "1"; ind.style.width = b.offsetWidth + "px"; ind.style.height = b.offsetHeight + "px";

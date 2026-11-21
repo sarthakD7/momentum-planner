@@ -20,8 +20,10 @@ css.textContent = `
 :root:root[data-style="glass"][data-theme="dark"]{--surface:rgba(22,28,44,calc(.52*var(--ui-op,1)));--surface-2:rgba(255,255,255,calc(.055*var(--ui-op,1)));--g-card:rgba(255,255,255,calc(.045*var(--ui-op,1)))}
 
 /* account badge (Dashboard only) */
-.acct{flex:none;width:34px;height:34px;border-radius:50%;border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));padding:0;display:grid;place-items:center;
-  background:linear-gradient(140deg,color-mix(in srgb,var(--accent) 85%,#fff 15%),color-mix(in srgb,var(--accent) 70%,#000 30%));color:var(--accent-ink);font:800 14px var(--f-display);cursor:pointer;position:relative}
+.acct{flex:none;width:34px;height:34px;border-radius:50%;padding:0;display:grid;place-items:center;cursor:pointer;position:relative;
+  border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);
+  background:color-mix(in srgb,var(--accent) 16%,transparent);-webkit-backdrop-filter:blur(12px) saturate(1.4);backdrop-filter:blur(12px) saturate(1.4);
+  color:var(--accent);font:800 14px var(--f-display);box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 14%,transparent)}
 .acct i{position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--bg);background:var(--muted)}
 .acct i.ok{background:var(--good)} .acct i.warn{background:var(--warn)}
 body:not([data-view="stats"]) .acct{display:none}
@@ -37,6 +39,7 @@ body:not([data-view="stats"]) .acct{display:none}
 .scrim.pillpop{align-items:flex-start!important;justify-content:center;padding:calc(env(safe-area-inset-top,0px) + 56px) 8px 8px;background:rgba(8,12,18,.28)}
 .scrim.pillpop>.sheet,.scrim.pillpop>form.sheet{width:min(400px,100%);max-height:min(78vh,640px);border-radius:28px!important;margin:0!important;align-self:flex-start!important;box-shadow:0 20px 60px -12px rgba(0,0,0,.55)}
 @media (min-width:700px){.scrim.pillpop{justify-content:flex-end;padding-right:16px}}
+@media (max-width:760px){.bnav{touch-action:none}}
 `;
 document.head.appendChild(css);
 // keep these rules after the app's own styles (which live in <body>) so they win
@@ -136,7 +139,7 @@ let origin = null;   // { rect, at } of the button just tapped
 const POP_IDS = ["searchBtn", "momBtn", "lvlBtn", "acctBtn"];
 document.addEventListener("click", e => {
   const b = e.target.closest && e.target.closest(POP_IDS.map(i => "#" + i).join(","));
-  if (b) origin = { rect: b.getBoundingClientRect(), at: Date.now() };
+  if (b) origin = { rect: b.getBoundingClientRect(), at: Date.now(), id: b.id };
 }, true);
 document.addEventListener("keydown", () => { origin = null; }, true);   // keyboard-opened search: no pill animation
 
@@ -145,6 +148,7 @@ function grow(scrim) {
   if (!o || Date.now() - o.at > 800) return;
   const sheet = scrim.querySelector(".sheet"); if (!sheet) return;
   scrim.classList.add("pillpop");
+  scrim.dataset.from = o.id;
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const s = sheet.getBoundingClientRect(), b = o.rect;
   // clip the sheet down to the button's shape, then open it out
@@ -158,9 +162,32 @@ function grow(scrim) {
   scrim.animate([{ backgroundColor: "rgba(8,12,18,0)" }, { backgroundColor: "rgba(8,12,18,.28)" }], { duration: 300, easing: "ease-out" });
 }
 
+// Reverse: when a pill closes, put a copy back for a moment and shrink it into its button
+function shrink(scrim) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const btn = document.getElementById(scrim.dataset.from || ""); if (!btn || !btn.getClientRects().length) return;
+  const ghost = document.createElement("div");
+  ghost.id = "pillGhost"; ghost.style.cssText = "position:fixed;inset:0;z-index:40;pointer-events:none";
+  ghost.appendChild(scrim); document.body.appendChild(ghost);
+  scrim.removeAttribute("data-act");
+  const sheet = scrim.querySelector(".sheet"); if (!sheet) { ghost.remove(); return; }
+  const s = sheet.getBoundingClientRect(), b = btn.getBoundingClientRect();
+  const top = Math.max(0, b.top - s.top), left = Math.max(0, b.left - s.left), right = Math.max(0, s.right - b.right), bottom = Math.max(0, s.bottom - b.bottom);
+  const r = Math.min(b.height / 2, 24);
+  [...sheet.children].forEach(c => c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: "ease-in", fill: "forwards" }));
+  const a = sheet.animate([
+    { clipPath: "inset(0px 0px 0px 0px round 28px)" },
+    { clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px round ${r}px)` },
+  ], { duration: 320, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
+  scrim.animate([{ backgroundColor: getComputedStyle(scrim).backgroundColor, backdropFilter: getComputedStyle(scrim).backdropFilter }, { backgroundColor: "rgba(8,12,18,0)", backdropFilter: "none" }], { duration: 300, easing: "ease-in", fill: "forwards" });
+  a.onfinish = a.oncancel = () => ghost.remove();
+  setTimeout(() => ghost.remove(), 600);
+}
+
 function watchSheets() {
   const root = document.getElementById("sheetRoot"); if (!root) return;
   new MutationObserver(muts => {
+    for (const m of muts) for (const n of m.removedNodes) if (n.nodeType === 1 && n.classList && n.classList.contains("pillpop") && !root.querySelector(".scrim")) shrink(n);
     for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) {
       const scrim = n.classList && n.classList.contains("scrim") ? n : n.querySelector && n.querySelector(".scrim");
       if (scrim) grow(scrim);
@@ -171,9 +198,23 @@ function watchSheets() {
   }).observe(root, { childList: true });
 }
 
+function slideToPick() {
+  const nav = document.getElementById("bnav"); if (!nav) return;
+  let x0 = null;
+  nav.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse") x0 = e.clientX; }, { passive: true });
+  nav.addEventListener("pointerup", e => {
+    if (x0 == null) return;
+    const moved = Math.abs(e.clientX - x0) > 12; x0 = null;
+    if (!moved) return;                                   // a plain tap is handled as usual
+    const b = document.elementFromPoint(e.clientX, e.clientY)?.closest("#bnav button");
+    if (b && b.getAttribute("aria-pressed") !== "true") b.click();
+  });
+  nav.addEventListener("pointercancel", () => { x0 = null; });
+}
+
 async function start() {
   keepLast();
-  addBadge(); watchSheets();
+  addBadge(); watchSheets(); slideToPick();
   // the sign-in client is created by boot.js a moment after the page starts
   for (let i = 0; i < 100 && !window.mpSupabase; i++) await new Promise(r => setTimeout(r, 100));
   user = await who();
