@@ -2,7 +2,7 @@
 // Pages and app files: network first, cached copy when offline.
 // Libraries and fonts from CDNs: cached copy first.
 // Supabase API traffic is never cached (sync handles offline data itself).
-const VERSION = "mp-v6";
+const VERSION = "mp-v7";
 const SHELL = ["./", "index.html", "boot.js", "supa-db.js", "notify.js", "ai.js", "mail.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 // Reminders sent by the notify server
@@ -47,8 +47,13 @@ self.addEventListener("fetch", e => {
   const url = new URL(req.url);
 
   if (url.origin === location.origin) {
+    // Always check with the server (a cheap "not modified" reply when nothing changed), so updates
+    // show up on the next open instead of after the host's 10-minute browser cache.
+    const fresh = req.mode === "navigate"
+      ? new Request(req.url, { cache: "no-cache", credentials: "same-origin" })
+      : new Request(req, { cache: "no-cache" });
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(fresh).then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
         return res;
       }).catch(() => caches.match(req, { ignoreSearch: req.mode === "navigate" }).then(r => r || caches.match("index.html")))
