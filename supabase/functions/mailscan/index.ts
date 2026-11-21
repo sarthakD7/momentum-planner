@@ -22,7 +22,7 @@ const G_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") || "";
 const REDIRECT = SB_URL.replace(/\/$/, "") + "/functions/v1/mailscan/callback";
 const APP_URL = "https://sarthakd7.github.io/momentum-planner/";
 const TZ = "Asia/Kolkata";
-const MAX_MSGS = 60, MAX_CHARS = 7000, BATCH = 6, BUDGET_MS = 110_000; // hard stop before Supabase's 150 s limit
+const MAX_MSGS = 60, MAX_CHARS = 7000, BATCH = 4, BUDGET_MS = 110_000; // hard stop before Supabase's 150 s limit
 const db = createClient(SB_URL, SERVICE, { auth: { persistSession: false } });
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
@@ -35,6 +35,14 @@ function aiProvider() {
   if (Deno.env.get("OPENAI_API_KEY")) return "openai";
   return "";
 }
+// Reading dates out of emails needs little reasoning: keep Gemini's thinking short so it answers quickly
+// (Flash-Lite: "minimal", its default; Flash: "low", its lowest level)
+function geminiThinking(model?: string) {
+  const m = model || "";
+  if (/flash-lite/.test(m)) return { thinkingConfig: { thinkingLevel: "minimal" } };
+  if (/flash/.test(m)) return { thinkingConfig: { thinkingLevel: "low" } };
+  return {};
+}
 // One call to the provider; errors carry the HTTP status so busy/overloaded replies can be retried
 async function aiOnce(p: string, model: string | undefined, prompt: string, signal: AbortSignal): Promise<string> {
   const fail = (r: Response, d: any) => Object.assign(new Error("AI " + r.status + ": " + (d?.error?.message || r.statusText)), { status: r.status });
@@ -46,7 +54,7 @@ async function aiOnce(p: string, model: string | undefined, prompt: string, sign
   }
   if (p === "gemini") {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-flash-latest"}:generateContent`, { method: "POST", headers: { "x-goog-api-key": Deno.env.get("GEMINI_API_KEY")!, "content-type": "application/json" }, signal,
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4000 } }) });
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4000, ...geminiThinking(model) } }) });
     const d = await r.json().catch(() => null); if (!r.ok) throw fail(r, d);
     return (d.candidates?.[0]?.content?.parts || []).map((x: any) => x.text || "").join("");
   }
@@ -60,7 +68,7 @@ async function aiOnce(p: string, model: string | undefined, prompt: string, sign
 }
 
 // Retries when the provider is busy (429/5xx), and on Gemini falls back to the lighter model
-const FALLBACK: Record<string, string[]> = { gemini: ["gemini-flash-latest", "gemini-3.5-flash-lite"], anthropic: ["claude-sonnet-5-5", "claude-haiku-5-5"], openai: ["gpt-6-luna"] };
+const FALLBACK: Record<string, string[]> = { gemini: ["gemini-3.5-flash-lite", "gemini-flash-latest"], anthropic: ["claude-sonnet-5-5", "claude-haiku-5-5"], openai: ["gpt-6-luna"] };
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function ai(prompt: string, deadline: number): Promise<string> {
   const p = aiProvider(), set = Deno.env.get("MAIL_AI_MODEL");
@@ -220,7 +228,11 @@ async function scanOne(link: any) {
   } while (pageToken && ids.length < MAX_MSGS);
 
   const mails = [];
-  for (const id of ids.slice(0, MAX_MSGS)) { if (left() < 70_000) break; try { mails.push(await messageText(token, id)); } catch (e) { console.error("read failed", id, e); } }
+  const todo = ids.slice(0, MAX_MSGS);
+  for (let i = 0; i < todo.length && left() > 70_000; i += 5) {   // 5 at a time; keep most of the time for the AI step
+    const got = await Promise.all(todo.slice(i, i + 5).map(id => messageText(token, id).catch(e => { console.error("read failed", id, e); return null; })));
+    for (const m of got) if (m) mails.push(m);
+  }
 
   const added: any[] = [];
   let aiFailed = "";
