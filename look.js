@@ -77,7 +77,11 @@ function renderLook(el) {
     <label class="field">Solid ←→ Clear<input type="range" id="lookClarity" min="0" max="100" step="5" value="${look.clarity}"></label>
     <div class="note" id="lookNote">${glass ? (look.clarity == 50 ? "Original look." : look.clarity < 50 ? "More solid than the original." : "Clearer than the original.") : "Switch Style to Frosted glass above to see this."}</div></div>`;
   const r = el.querySelector("#lookClarity"), note = el.querySelector("#lookNote");
-  r.oninput = () => { setLook({ clarity: +r.value }); if (glass) note.textContent = +r.value === 50 ? "Original look." : +r.value < 50 ? "More solid than the original." : "Clearer than the original."; };
+  r.oninput = () => {
+    setLook({ clarity: +r.value });
+    const g = document.documentElement.dataset.style === "glass";   // the style may have been switched since this pane opened
+    note.textContent = !g ? "Switch Style to Frosted glass above to see this." : +r.value === 50 ? "Original look." : +r.value < 50 ? "More solid than the original." : "Clearer than the original.";
+  };
 }
 
 /* ---------- 2. account badge ---------- */
