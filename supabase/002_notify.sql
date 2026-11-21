@@ -26,6 +26,9 @@ create policy subs_update on public.push_subscriptions for update to authenticat
 create policy subs_delete on public.push_subscriptions for delete to authenticated using (owner = (select auth.uid()));
 revoke all on public.push_subscriptions from anon, authenticated;
 grant select, insert, update, delete on public.push_subscriptions to authenticated;
+-- The notify server (service role) reads plans and subscriptions. Explicit because new tables aren't auto-exposed.
+grant select, insert, update, delete on public.push_subscriptions to service_role;
+grant select on public.docs to service_role;
 
 -- 2. Private config + sent log (not exposed through the API at all)
 create schema if not exists private;
