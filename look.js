@@ -15,15 +15,15 @@ const css = document.createElement("style");
 css.id = "look-css";
 css.textContent = `
 /* panel opacity for Frosted glass: --ui-op scales the theme's own alpha values (1 = original) */
-:root:root[data-style="glass"]{--surface:rgba(255,255,255,calc(.56*var(--ui-op,1)));--surface-2:rgba(255,255,255,calc(.36*var(--ui-op,1)));--g-card:rgba(255,255,255,calc(.42*var(--ui-op,1)))}
-@media (prefers-color-scheme: dark){:root:root[data-style="glass"]:not([data-theme="light"]){--surface:rgba(22,28,44,calc(.52*var(--ui-op,1)));--surface-2:rgba(255,255,255,calc(.055*var(--ui-op,1)));--g-card:rgba(255,255,255,calc(.045*var(--ui-op,1)))}}
-:root:root[data-style="glass"][data-theme="dark"]{--surface:rgba(22,28,44,calc(.52*var(--ui-op,1)));--surface-2:rgba(255,255,255,calc(.055*var(--ui-op,1)));--g-card:rgba(255,255,255,calc(.045*var(--ui-op,1)))}
+:root:root[data-style="glass"]{--surface:rgba(255,255,255,calc(.56*var(--ui-op,1)*var(--clash,1)));--surface-2:rgba(255,255,255,calc(.36*var(--ui-op,1)*var(--clash,1)));--g-card:rgba(255,255,255,calc(.42*var(--ui-op,1)*var(--clash,1)))}
+@media (prefers-color-scheme: dark){:root:root[data-style="glass"]:not([data-theme="light"]){--surface:rgba(22,28,44,calc(.52*var(--ui-op,1)*var(--clash,1)));--surface-2:rgba(255,255,255,calc(.055*var(--ui-op,1)*var(--clash,1)));--g-card:rgba(255,255,255,calc(.045*var(--ui-op,1)*var(--clash,1)))}}
+:root:root[data-style="glass"][data-theme="dark"]{--surface:rgba(22,28,44,calc(.52*var(--ui-op,1)*var(--clash,1)));--surface-2:rgba(255,255,255,calc(.055*var(--ui-op,1)*var(--clash,1)));--g-card:rgba(255,255,255,calc(.045*var(--ui-op,1)*var(--clash,1)))}
 
 /* account badge (Dashboard only) */
 .acct{flex:none;width:34px;height:34px;border-radius:50%;padding:0;display:grid;place-items:center;cursor:pointer;position:relative;
   border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);
   background:color-mix(in srgb,var(--accent) 16%,transparent);-webkit-backdrop-filter:blur(12px) saturate(1.4);backdrop-filter:blur(12px) saturate(1.4);
-  color:var(--accent);font:800 14px var(--f-display);box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 14%,transparent)}
+  color:color-mix(in srgb,var(--accent) 70%,var(--ink));font:800 14px var(--f-display);box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 14%,transparent)}
 .acct i{position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--bg);background:var(--muted)}
 .acct i.ok{background:var(--good)} .acct i.warn{background:var(--warn)}
 body:not([data-view="stats"]) .acct{display:none}
@@ -36,10 +36,62 @@ body:not([data-view="stats"]) .acct{display:none}
 .acctpop .row .btn{flex:1}
 
 /* expanding pill: the sheet grows out of the button that opened it */
-.scrim.pillpop{align-items:flex-start!important;justify-content:center;padding:calc(env(safe-area-inset-top,0px) + 56px) 8px 8px;background:rgba(8,12,18,.28)}
+.scrim.pillpop{align-items:flex-start!important;justify-content:center;padding:calc(var(--toph,48px) + 8px) 8px 8px;background:rgba(8,12,18,.28)}
 .scrim.pillpop>.sheet,.scrim.pillpop>form.sheet{width:min(400px,100%);max-height:min(78vh,640px);border-radius:28px!important;margin:0!important;align-self:flex-start!important;box-shadow:0 20px 60px -12px rgba(0,0,0,.55)}
 @media (min-width:700px){.scrim.pillpop{justify-content:flex-end;padding-right:16px}}
 @media (max-width:760px){.bnav{touch-action:none}}
+
+/* ---------- legibility ---------- */
+/* panels a bit more solid when the theme fights the scenery (light theme on a night scene, dark theme on a day scene) */
+:root[data-theme="light"]:is([data-scene="sea"],[data-scene="aurora"],[data-scene="dusk"]),
+:root[data-theme="dark"]:is([data-scene="forest"],[data-scene="alpine"],[data-scene="meadow"]){--clash:1.4}
+@media (prefers-color-scheme: light){:root:not([data-theme]):is([data-scene="sea"],[data-scene="aurora"],[data-scene="dusk"]){--clash:1.4}}
+@media (prefers-color-scheme: dark){:root:not([data-theme]):is([data-scene="forest"],[data-scene="alpine"],[data-scene="meadow"]){--clash:1.4}}
+/* secondary (grey) text: darker in light mode and lighter in dark mode on frosted panels and over scenery */
+:root:root:is([data-style="glass"],[data-scene]){--muted:#3E4857}
+@media (prefers-color-scheme: dark){:root:root:is([data-style="glass"],[data-scene]):not([data-theme="light"]){--muted:#B9C3D1}}
+:root:root:is([data-style="glass"],[data-scene])[data-theme="dark"]{--muted:#B9C3D1}
+/* Goals, Overview and Review had no panel behind their text over scenery: give them a light frosted one */
+:root[data-scene] :is(#goalsView,#retroView,#overviewView){background:color-mix(in srgb,var(--surface) 72%,transparent)!important;
+  -webkit-backdrop-filter:blur(16px) saturate(1.2)!important;backdrop-filter:blur(16px) saturate(1.2)!important;border-color:color-mix(in srgb,var(--g-edge,var(--line)) 60%,transparent)!important}
+/* switches (Timeline / Tasks / Both, Day / Week, Grid / List…): frosted backing so labels don't sit on the scenery */
+:root:is([data-style="glass"],[data-scene]) .seg{background:color-mix(in srgb,var(--surface) 72%,transparent);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3)}
+:root:is([data-style="glass"],[data-scene]) .seg button[aria-pressed="true"]{color:color-mix(in srgb,var(--accent) 75%,var(--ink))}
+/* links and chart labels on frosted panels: a little deeper */
+:root:is([data-style="glass"],[data-scene]) :is(.linkbtn,header .link,header .open){color:color-mix(in srgb,var(--accent) 72%,var(--ink))}
+:root:is([data-style="glass"],[data-scene]) .clabels span{color:color-mix(in srgb,var(--ink) 78%,transparent)}
+/* chart target line label was drawn at 60% opacity */
+.cthr{opacity:1;border-top-color:color-mix(in srgb,var(--muted) 55%,transparent)}
+/* active menu label and headings over scenery */
+.bnav button[aria-pressed="true"]{color:color-mix(in srgb,var(--accent) 70%,var(--ink))}
+:root[data-scene] :is(.datelabel,.top h1,#modeTitle,.ovrange){text-shadow:0 0 2px color-mix(in srgb,var(--bg) 90%,transparent),0 1px 10px color-mix(in srgb,var(--bg) 80%,transparent)}
+
+/* ---------- top bar: a frosted pill like the menu (in the page flow on bigger screens, floating on phones) ---------- */
+@media (min-width:761px){
+  header.top{margin:8px 12px 2px;padding:6px 10px!important;border-radius:22px;
+    background:color-mix(in srgb,var(--surface) 62%,transparent)!important;
+    -webkit-backdrop-filter:blur(18px) saturate(1.5);backdrop-filter:blur(18px) saturate(1.5);
+    border:1px solid color-mix(in srgb,var(--ink) 10%,transparent);
+    box-shadow:0 10px 30px -14px rgba(0,0,0,.4),inset 0 1px 0 color-mix(in srgb,#fff 10%,transparent)}
+  header.top :is(.datelabel,h1,#modeTitle){text-shadow:none!important}
+}
+@media (max-width:760px){
+  header.top{position:fixed!important;z-index:31;top:calc(env(safe-area-inset-top,0px) + 8px);
+    left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));
+    padding:6px 8px!important;border-radius:26px;gap:6px;
+    background:color-mix(in srgb,var(--surface) 55%,transparent)!important;
+    -webkit-backdrop-filter:blur(18px) saturate(1.5);backdrop-filter:blur(18px) saturate(1.5);
+    border:1px solid color-mix(in srgb,var(--ink) 12%,transparent);
+    box-shadow:0 10px 30px -10px rgba(0,0,0,.45),inset 0 1px 0 color-mix(in srgb,#fff 10%,transparent)}
+  header.top h1{text-shadow:none!important}
+  :root[data-scene] header.top :is(.datelabel,h1,#modeTitle){text-shadow:none}
+  /* screens with fixed controls above the list: start below the bar */
+  .app{padding-top:calc(var(--toph,60px) + 6px)}
+  /* screens that are one long list: the list scrolls up behind the bar */
+  body:is([data-view="stats"],[data-view="focus"],[data-view="goals"],[data-view="pages"],[data-view="ai"]) .app{padding-top:0}
+  body:is([data-view="stats"],[data-view="focus"],[data-view="goals"],[data-view="pages"]) .app .scroll,
+  body[data-view="ai"] .aiwrap{padding-top:calc(var(--toph,60px) + 6px);scroll-padding-top:calc(var(--toph,60px) + 6px)}
+}
 `;
 document.head.appendChild(css);
 // keep these rules after the app's own styles (which live in <body>) so they win
@@ -212,9 +264,16 @@ function slideToPick() {
   nav.addEventListener("pointercancel", () => { x0 = null; });
 }
 
+// height of the floating top bar (it can wrap to two lines), so content starts below it
+function trackTop() {
+  const top = document.querySelector("header.top"); if (!top) return;
+  const set = () => { const r = top.getBoundingClientRect(); document.documentElement.style.setProperty("--toph", Math.round(r.bottom) + "px"); };
+  new ResizeObserver(set).observe(top); addEventListener("resize", set); set();
+}
+
 async function start() {
   keepLast();
-  addBadge(); watchSheets(); slideToPick();
+  addBadge(); watchSheets(); slideToPick(); trackTop();
   // the sign-in client is created by boot.js a moment after the page starts
   for (let i = 0; i < 100 && !window.mpSupabase; i++) await new Promise(r => setTimeout(r, 100));
   user = await who();
