@@ -4804,7 +4804,7 @@ function bindUI() {
     justSwiped = Date.now();
     card.classList.remove("swiping", "swipe-go"); card.style.transform = ""; delete card.dataset.swipe; delete card.dataset.dir;
     if (Math.abs(dx) < TH) return;
-    try { navigator.vibrate && navigator.vibrate(12); } catch {}
+    try { if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(12); } catch {}
     if (dx > 0) {
       const wasDone = !!t.done;
       toggleTask(t.id);
