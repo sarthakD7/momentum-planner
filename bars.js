@@ -1,10 +1,10 @@
 // Momentum Planner: blend the phone's system bars into the app.
-// Android paints the status bar AND the gesture/navigation bar of an installed web app in one solid colour
-// (the page's theme-color); web apps can't make them see-through or colour them separately. So we:
-//  1. pick one colour between the top and bottom edges of whatever is behind the app (scenery with its
-//     dimming, or the plain theme background), and use it for both bars;
-//  2. in the installed app on a phone, fade the scenery into that colour at the top and bottom,
-//     so the solid bars read as a continuation of the picture instead of a hard strip.
+// On the user's Android phone (installed app), the two system bars behave differently:
+//  - the top status bar follows the page's theme-color live, so we set it to the colour at the top edge of
+//    whatever is behind the app (scenery with its dimming, or the plain theme background);
+//  - the bottom gesture bar keeps the manifest's theme_color from install time and ignores later changes,
+//    so instead the app's bottom edge fades into that fixed colour.
+// Web apps can't make either bar see-through.
 
 const meta = document.querySelector('meta[name="theme-color"]') || Object.assign(document.head.appendChild(document.createElement("meta")), { name: "theme-color" });
 const cache = new Map();   // image url -> { top: [r,g,b], bottom: [r,g,b] }
@@ -59,7 +59,7 @@ async function sync() {
       const dim = (parseFloat(cssVar("--sdim")) || 25) / 100;   // the app lays var(--bg) over the scenery at this strength
       const seen = c => c.map((v, i) => v * (1 - dim) + bg[i] * dim);
       const t = seen(e.top), b = seen(e.bottom);
-      rgb = t.map((v, i) => (v + b[i]) / 2);                      // one colour for both bars
+      rgb = t;                                                   // the top bar sits against the top of the picture
     }
   }
   if (my !== busy) return;
@@ -73,6 +73,16 @@ let last = "";
 // The app also writes this colour (its accent colour) whenever settings apply; put ours back each time.
 new MutationObserver(() => { if (last && meta.getAttribute("content") !== last) meta.setAttribute("content", last); })
   .observe(meta, { attributes: true, attributeFilter: ["content"] });
+
+// The bottom bar's fixed colour = the manifest's theme_color (what Android baked in at install)
+document.documentElement.style.setProperty("--navbar", "#16172e");
+(async () => {
+  try {
+    const href = document.querySelector('link[rel="manifest"]')?.href;
+    const m = href ? await fetch(href).then(r => r.json()) : null;
+    if (m && /^#[0-9a-f]{6}$/i.test(m.theme_color || "")) document.documentElement.style.setProperty("--navbar", m.theme_color);
+  } catch {}
+})();
 
 let t = 0;
 const later = () => { clearTimeout(t); t = setTimeout(sync, 120); };
@@ -88,7 +98,7 @@ const fade = document.createElement("style");
 fade.textContent = `@media (display-mode: standalone) and (max-width: 760px){
   .mp-edge{position:fixed;left:0;right:0;z-index:0;pointer-events:none}
   .mp-edge.t{top:0;height:calc(env(safe-area-inset-top,0px) + 36px);background:linear-gradient(var(--sysbar,var(--bg)),transparent)}
-  .mp-edge.b{bottom:0;height:calc(env(safe-area-inset-bottom,0px) + 64px);background:linear-gradient(transparent,var(--sysbar,var(--bg)))}
+  .mp-edge.b{bottom:0;height:calc(env(safe-area-inset-bottom,0px) + 56px);background:linear-gradient(transparent,var(--navbar,#16172e))}
 }
 .mp-edge{display:none}
 @media (display-mode: standalone) and (max-width: 760px){.mp-edge{display:block}}`;
