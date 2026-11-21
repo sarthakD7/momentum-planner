@@ -60,13 +60,17 @@
   async function start() {
     let mod;
     try { mod = await import(LIB); } catch (e) { console.error("Couldn't load Supabase", e); resolveDb(null); return; }
-    const { createDb } = await import(new URL("supa-db.js", scriptSrc || location.href).href);
+    const base = scriptSrc || location.href;
+    const [{ createDb }, notify] = await Promise.all([
+      import(new URL("supa-db.js", base).href),
+      import(new URL("notify.js", base).href).catch(e => { console.error("Reminders module failed", e); return null; }),
+    ]);
     const supabase = mod.createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "pkce" },
     });
-    window.mpSupabase = supabase; // used by Settings -> Sign out in step 2
+    window.mpSupabase = supabase;
 
-    const go = session => { resolveDb(createDb(supabase, session.user.id)); };
+    const go = session => { const db = createDb(supabase, session.user.id); if (notify) notify.init(supabase, db); resolveDb(db); };
     const { data: { session } } = await supabase.auth.getSession();
     if (session) { go(session); return; }
 

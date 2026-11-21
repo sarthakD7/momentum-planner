@@ -2,8 +2,31 @@
 // Pages and app files: network first, cached copy when offline.
 // Libraries and fonts from CDNs: cached copy first.
 // Supabase API traffic is never cached (sync handles offline data itself).
-const VERSION = "mp-v1";
-const SHELL = ["./", "index.html", "boot.js", "supa-db.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
+const VERSION = "mp-v2";
+const SHELL = ["./", "index.html", "boot.js", "supa-db.js", "notify.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
+
+// Reminders sent by the notify server
+self.addEventListener("push", e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { title: "Momentum Planner", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "Momentum Planner", {
+    body: d.body || "",
+    tag: d.tag || undefined,
+    renotify: !!d.tag,
+    icon: "icons/icon-192.png",
+    badge: "icons/icon-192.png",
+    data: { url: d.url || self.registration.scope },
+  }));
+});
+
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || self.registration.scope;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+    const open = list.find(c => c.url.startsWith(self.registration.scope));
+    return open ? open.focus() : self.clients.openWindow(url);
+  }));
+});
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
