@@ -7,7 +7,7 @@
   const LIB = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
   const scriptSrc = document.currentScript && document.currentScript.src;
-  window.mpVersion = "mp-v20";   // keep in step with VERSION in sw.js; shown in Settings → Reminders → Account
+  window.mpVersion = "mp-v21";   // keep in step with VERSION in sw.js; shown in Settings → Reminders → Account
   let resolveDb, rejectDb;
   const dbReady = new Promise((res, rej) => { resolveDb = res; rejectDb = rej; });
   // Stand-in for claude.ai's "downloads" capability: saves a file through the browser.
@@ -23,6 +23,7 @@
   // Stand-in for claude.ai's "sample" capability: whichever AI provider is set in Settings → AI
   import(new URL("mail.js", scriptSrc || location.href).href).catch(e => console.error("Email scan module failed", e));
   import(new URL("bars.js", scriptSrc || location.href).href).catch(e => console.error("Bar colour module failed", e));
+  import(new URL("look.js", scriptSrc || location.href).href).catch(e => console.error("Look module failed", e));
   const aiMod = import(new URL("ai.js", scriptSrc || location.href).href).catch(e => { console.error("AI module failed", e); return null; });
   const sample = async () => { const m = await aiMod; return m && m.configured() ? m.sampler : null; };
   window.claude = { use: async name => (name === "db" ? dbReady : name === "downloads" ? downloads : name === "sample" ? sample() : null) };
