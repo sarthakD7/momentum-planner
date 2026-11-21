@@ -44,8 +44,9 @@ body:not([data-view="stats"]) .acct{display:none}
   .scrim.pillpop[data-from="searchBtn"]{justify-content:center;padding-inline:16px}
   .scrim.pillpop:is([data-from="momBtn"],[data-from="lvlBtn"]){justify-content:flex-end;padding-left:16px;padding-right:var(--popR,16px)}
 }
-/* no background blur behind pills while they animate: much smoother */
-.scrim.pillpop{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+/* no background blur behind pills and sheets: it switched on and off in one jump (flicker) and slowed the animations; a plain dim instead */
+.scrim{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+:root[data-style="glass"] .scrim:not(.pillpop){background:rgba(10,14,24,.36)}
 .scrim.pillpop>.sheet{will-change:clip-path;position:relative;z-index:1}
 .pillshadow{position:fixed;z-index:0;pointer-events:none;box-shadow:0 20px 60px -12px rgba(0,0,0,.55)}
 /* menu highlight: a softer glide, no bounce */
@@ -320,7 +321,8 @@ function watchViews() {
     document.querySelectorAll(".app > .pane, .app > .shell > .pane, .app > :not(nav):not(.bnav):not(#bnav):not(header)").forEach(el => {
       if (!el.getClientRects().length || getComputedStyle(el).position === "fixed") return;
       if (el.querySelector("#bnav, .bnav")) return;
-      el.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 380, easing: EASE_OUT });
+      // slide only: fading a group switches off the frosted blur of the panels inside it for the length of the fade (flicker)
+      el.animate([{ transform: "translateY(14px)" }, { transform: "none" }], { duration: 420, easing: EASE_OUT });
     });
   }).observe(document.body, { attributes: true, attributeFilter: ["data-view"] });
 }
