@@ -19,7 +19,10 @@
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     },
   };
-  window.claude = { use: async name => (name === "db" ? dbReady : name === "downloads" ? downloads : null) };
+  // Stand-in for claude.ai's "sample" capability: whichever AI provider is set in Settings → AI
+  const aiMod = import(new URL("ai.js", scriptSrc || location.href).href).catch(e => { console.error("AI module failed", e); return null; });
+  const sample = async () => { const m = await aiMod; return m && m.configured() ? m.sampler : null; };
+  window.claude = { use: async name => (name === "db" ? dbReady : name === "downloads" ? downloads : name === "sample" ? sample() : null) };
 
   const css = `
   .mp-auth{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:rgba(8,12,18,.55);padding:16px;font-family:Manrope,system-ui,sans-serif}

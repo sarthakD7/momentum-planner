@@ -2650,6 +2650,7 @@ function addFind(id) {
 /* ---------- AI planner (Claude via sample) ---------- */
 const AI = { smp: null, turns: [], items: [], planTitle: "", busy: false, ctl: null, refs: {}, t0: 0, tick: 0, lastWrite: 0, lastText: "", showFixed: true };
 let aiSaveTimer = null;
+window.addEventListener("mp-ai-changed", () => { AI.smp = null; aiConnect().then(() => renderAI()); });
 async function initAI() { try { AI.showFixed = localStorage.getItem(LS + "-aifixed") !== "0"; } catch {} await aiConnect(); renderAI(); }
 const within = (p, ms) => Promise.race([Promise.resolve(p).catch(() => null), new Promise(r => setTimeout(() => r(null), ms))]);
 async function aiConnect() {
@@ -2661,7 +2662,7 @@ async function aiConnect() {
 }
 function aiStatusNote() {
   if (AI.state === "denied") return `Claude is turned off for this page. <button class="linkbtn" data-act="ai-perms" style="display:inline">Allow Claude</button>`;
-  if (AI.state === "unavailable" || AI.state === "outside") return `Claude can't be reached from the planner in this view. You can still plan with Claude: <button class="linkbtn" data-act="ai-copy" style="display:inline">Copy request</button>, paste it into a Claude chat, then <button class="linkbtn" data-act="ai-paste" style="display:inline">Paste the answer</button>. <button class="linkbtn" data-act="ai-reconnect" style="display:inline">Check again</button>`;
+  if (AI.state === "unavailable" || AI.state === "outside") return `No AI connected on this device. Add one in Settings → AI, or plan with any AI chat: <button class="linkbtn" data-act="ai-copy" style="display:inline">Copy request</button>, paste it into a Claude chat, then <button class="linkbtn" data-act="ai-paste" style="display:inline">Paste the answer</button>. <button class="linkbtn" data-act="ai-reconnect" style="display:inline">Check again</button>`;
   return "";
 }
 function saveAI(now) {
@@ -2786,7 +2787,7 @@ async function aiSend(text, retry) {
     const msg = c === "cancelled" ? (AI.timedOut ? "No answer after 2.5 minutes, so I stopped waiting." : "Stopped.") : ["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"].includes(c) ? "" :
       c === "rate_limited" ? "Too many requests right now, or your usage limit was reached. Try again in a little while." : c === "invalid_json" ? "The answer didn't come back as a plan." :
       c === "empty_completion" ? "Claude didn't answer. Try asking for a smaller plan." : c === "prompt_too_large" ? "Your planner is too big to send at once. Try a narrower request (e.g. just tomorrow)." :
-      c === "refused" ? "Claude declined that request. Try rephrasing it." : c === "session_expired" ? "Your claude.ai session expired. Sign in again." : `Something went wrong${c ? ` (${c})` : ""}.`;
+      c === "refused" ? "The AI declined that request. Try rephrasing it." : c === "bad_key" ? "Your AI key was rejected. Check it in Settings → AI." : c === "bad_model" ? "That AI model wasn't found. Check the model name in Settings → AI." : c === "network" ? "Couldn't reach the AI provider. Check your connection." : c === "provider_error" ? "The AI provider returned an error" + (e.message ? ": " + String(e.message).slice(0, 160) : ".") : c === "session_expired" ? "Your claude.ai session expired. Sign in again." : `Something went wrong${c ? ` (${c})` : ""}.`;
     if (!msg) AI.turns.push({ role: "note", status: true, content: "" });
     else AI.turns.push({ role: "note", content: msg, retry: c !== "cancelled" || AI.timedOut });
   } finally { clearInterval(AI.tick); AI.busy = false; AI.ctl = null; saveAI(true); renderAI(); }
@@ -4160,7 +4161,7 @@ function openMomentumSheet() {
 function openSettingsSheet(section) {
   const s = set(), calOk = !!C.mcp && C.status !== "off";
   let hrs = ""; for (let h = 0; h <= 24; h++) hrs += `<option value="${h}">${h === 24 ? "12am (midnight)" : fmtMin(h*60)}</option>`;
-  const PANES = [["appearance", "Appearance", "palette"], ["day", "Day & focus", "clock"], ["routine", "Routine", "sun"], ["breaks", "Breaks", "plan"], ["motivation", "Motivation", "flame"], ["calendar", "Calendar", "events"], ["notify", "Reminders", "alert"], ["data", "Data", "folder"]];
+  const PANES = [["appearance", "Appearance", "palette"], ["day", "Day & focus", "clock"], ["routine", "Routine", "sun"], ["breaks", "Breaks", "plan"], ["motivation", "Motivation", "flame"], ["calendar", "Calendar", "events"], ["notify", "Reminders", "alert"], ["ai", "AI", "ai"], ["data", "Data", "folder"]];
   const secMap = { theme: "appearance", layout: "day", momentum: "day", motivation: "motivation", calendar: "calendar" };
   let pane = secMap[section] || section || (() => { try { return localStorage.getItem(LS + "-setpane"); } catch { return null; } })() || "appearance";
   if (!PANES.some(p => p[0] === pane)) pane = "appearance";
@@ -4177,7 +4178,7 @@ function openSettingsSheet(section) {
           ${grp("Theme color", "", `<div class="swatches" role="radiogroup" aria-label="Theme color">${ACCENTS.map(([k, name, hex]) => `<button type="button" class="swatch" role="radio" data-accent="${k}" aria-checked="${k === (s.accent || "blue")}"><i style="background:${hex}"></i>${name}</button>`).join("")}</div>`)}
         </section>
         <section class="setpane" data-pane="day" role="tabpanel">
-          ${grp("Adding tasks", "Quick boxes understand days, times, lengths, priority and common shortcuts (tmrw, kal, parso, b4, after lunch, asap).", `<label class="check"><input type="checkbox" id="sTidy"${s.aiTidy !== false ? " checked" : ""}><span>Tidy new tasks with AI<small>A moment after you add a task, Claude turns quick or messy wording into a clear title and fixes the day or time if needed. You can undo each change. Uses Claude only when the planner is open in claude.ai.</small></span></label>`)}
+          ${grp("Adding tasks", "Quick boxes understand days, times, lengths, priority and common shortcuts (tmrw, kal, parso, b4, after lunch, asap).", `<label class="check"><input type="checkbox" id="sTidy"${s.aiTidy !== false ? " checked" : ""}><span>Tidy new tasks with AI<small>A moment after you add a task, Claude turns quick or messy wording into a clear title and fixes the day or time if needed. You can undo each change. Uses the AI you set in Settings → AI.</small></span></label>`)}
           ${grp("Timeline", "The hours shown on the Day and Week views.", `<div class="row2"><label class="field">Starts<select id="sDayStart">${hrs}</select></label><label class="field">Ends<select id="sDayEnd">${hrs}</select></label></div>`)}
           ${grp("Work hours", "", `<label class="check"><input type="checkbox" id="sShowWork"${s.showWork ? " checked" : ""}><span>Shade work hours on the timeline</span></label><div class="row2"><label class="field">Starts<select id="sWorkStart">${timeOpts(s.workStart)}</select></label><label class="field">Ends<select id="sWorkEnd">${timeOpts(s.workEnd)}</select></label></div>`)}
           ${grp("Daily focus target", `Momentum is out of 100: tasks done (40), focus against this target (30), habits (30). Days at ${HIT}+ build your streak.`, `<label class="field">Minutes per day<input id="sTarget" type="number" min="15" max="600" step="15" value="${s.focusTarget}" inputmode="numeric"></label>`)}
@@ -4193,6 +4194,7 @@ function openSettingsSheet(section) {
             <button type="button" class="btn" id="sBrAdd" style="align-self:flex-start">Add break</button></div>`)}
         </section>
         <section class="setpane" data-pane="notify" role="tabpanel"><div id="mpNotify" style="display:flex;flex-direction:column;gap:inherit"></div></section>
+        <section class="setpane" data-pane="ai" role="tabpanel"><div id="mpAI" style="display:flex;flex-direction:column;gap:inherit"></div></section>
         <section class="setpane" data-pane="data" role="tabpanel">
           ${grp("Backup", "Download everything as a file you can keep or import later.", `<div class="chiprow"><button type="button" class="btn primary" data-act="export" data-kind="json" style="flex:none">Export backup (.json)</button><button type="button" class="btn" data-act="export" data-kind="csv">Tasks as spreadsheet (.csv)</button></div>`)}
           ${grp("Automatic daily backups", "A snapshot of everything is saved inside the planner once a day, on whichever device opens it first. The last 14 days are kept.", `<div class="subs" id="abList"><p class="note" style="margin:0">Loading…</p></div><button type="button" class="btn" data-act="ab-now" style="align-self:flex-start">Back up now</button>`)}
@@ -4218,6 +4220,7 @@ function openSettingsSheet(section) {
   const showPane = k => { document.querySelectorAll(".setnav [data-pane]").forEach(x => x.setAttribute("aria-selected", String(x.dataset.pane === k))); document.querySelectorAll(".setpane").forEach(x => x.hidden = x.dataset.pane !== k); try { localStorage.setItem(LS + "-setpane", k); } catch {} };
   showPane(pane);
   if (window.mpNotify) window.mpNotify.render(document.getElementById("mpNotify"));
+  if (window.mpAI) window.mpAI.render(document.getElementById("mpAI"));
   let brs = (s.breaks || []).map(b => ({ ...b }));
   const drawBr = () => { $("#sBrList").innerHTML = breaksHTML(brs); };
   drawBr();
