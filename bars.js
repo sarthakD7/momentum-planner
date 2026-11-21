@@ -92,16 +92,16 @@ const watchScene = () => { const s = document.getElementById("scene"); if (s) ne
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => { watchScene(); later(); }); else { watchScene(); later(); }
 addEventListener("load", later);
 
-// Fades at the top and bottom edges (installed app, phone widths only). They sit above the scenery
+// Fades at the top and bottom edges (installed app on touch screens: phones and tablets). They sit above the scenery
 // and under the app's panels, so they only tint the background, never your content.
 const fade = document.createElement("style");
-fade.textContent = `@media (display-mode: standalone) and (max-width: 760px){
+fade.textContent = `@media (display-mode: standalone) and (pointer: coarse){
   .mp-edge{position:fixed;left:0;right:0;z-index:0;pointer-events:none}
   .mp-edge.t{top:0;height:calc(env(safe-area-inset-top,0px) + 36px);background:linear-gradient(var(--sysbar,var(--bg)),transparent)}
   .mp-edge.b{bottom:0;height:calc(env(safe-area-inset-bottom,0px) + 56px);background:linear-gradient(transparent,var(--navbar,#16172e))}
 }
 .mp-edge{display:none}
-@media (display-mode: standalone) and (max-width: 760px){.mp-edge{display:block}}`;
+@media (display-mode: standalone) and (pointer: coarse){.mp-edge{display:block}}`;
 document.head.appendChild(fade);
 function addEdges() {
   if (document.querySelector(".mp-edge")) return;
