@@ -4868,6 +4868,17 @@ init();
   .bnav button span{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
   .bnav button[aria-pressed="true"] span{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;font-size:11px}
   .bnav button{min-height:42px;justify-content:center}
+
+  /* Menu pill floats over the page (no separate strip): content runs to the bottom of the screen and
+     scrolls behind the pill, which is translucent frosted glass */
+  .app{padding-bottom:0}
+  .bnav{position:fixed!important;left:0;right:0;bottom:0;z-index:30;
+    background:color-mix(in srgb,var(--surface) 55%,transparent)!important;
+    -webkit-backdrop-filter:blur(18px) saturate(1.5)!important;backdrop-filter:blur(18px) saturate(1.5)!important;
+    border:1px solid color-mix(in srgb,var(--ink) 12%,transparent)!important;
+    box-shadow:0 10px 30px -10px rgba(0,0,0,.45),inset 0 1px 0 color-mix(in srgb,#fff 10%,transparent)!important}
+  .app .scroll{padding-bottom:calc(78px + env(safe-area-inset-bottom,0px))}
+  .app .scroll{scroll-padding-bottom:calc(78px + env(safe-area-inset-bottom,0px))}
 }
 /* Touch screens (phones and tablets): no blue tap squares or focus rings on tap, and no scrollbar on scrolling areas */
 @media (pointer:coarse){

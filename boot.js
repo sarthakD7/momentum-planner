@@ -7,7 +7,7 @@
   const LIB = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
   const scriptSrc = document.currentScript && document.currentScript.src;
-  window.mpVersion = "mp-v19";   // keep in step with VERSION in sw.js; shown in Settings → Reminders → Account
+  window.mpVersion = "mp-v20";   // keep in step with VERSION in sw.js; shown in Settings → Reminders → Account
   let resolveDb, rejectDb;
   const dbReady = new Promise((res, rej) => { resolveDb = res; rejectDb = rej; });
   // Stand-in for claude.ai's "downloads" capability: saves a file through the browser.
