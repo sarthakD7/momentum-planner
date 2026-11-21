@@ -4161,7 +4161,7 @@ function openMomentumSheet() {
 function openSettingsSheet(section) {
   const s = set(), calOk = !!C.mcp && C.status !== "off";
   let hrs = ""; for (let h = 0; h <= 24; h++) hrs += `<option value="${h}">${h === 24 ? "12am (midnight)" : fmtMin(h*60)}</option>`;
-  const PANES = [["appearance", "Appearance", "palette"], ["day", "Day & focus", "clock"], ["routine", "Routine", "sun"], ["breaks", "Breaks", "plan"], ["motivation", "Motivation", "flame"], ["calendar", "Calendar", "events"], ["notify", "Reminders", "alert"], ["ai", "AI", "ai"], ["data", "Data", "folder"]];
+  const PANES = [["appearance", "Appearance", "palette"], ["day", "Day & focus", "clock"], ["routine", "Routine", "sun"], ["breaks", "Breaks", "plan"], ["motivation", "Motivation", "flame"], ["calendar", "Calendar", "events"], ["notify", "Reminders", "alert"], ["mail", "Email scan", "inbox"], ["ai", "AI", "ai"], ["data", "Data", "folder"]];
   const secMap = { theme: "appearance", layout: "day", momentum: "day", motivation: "motivation", calendar: "calendar" };
   let pane = secMap[section] || section || (() => { try { return localStorage.getItem(LS + "-setpane"); } catch { return null; } })() || "appearance";
   if (!PANES.some(p => p[0] === pane)) pane = "appearance";
@@ -4194,6 +4194,7 @@ function openSettingsSheet(section) {
             <button type="button" class="btn" id="sBrAdd" style="align-self:flex-start">Add break</button></div>`)}
         </section>
         <section class="setpane" data-pane="notify" role="tabpanel"><div id="mpNotify" style="display:flex;flex-direction:column;gap:inherit"></div></section>
+        <section class="setpane" data-pane="mail" role="tabpanel"><div id="mpMail" style="display:flex;flex-direction:column;gap:inherit"></div></section>
         <section class="setpane" data-pane="ai" role="tabpanel"><div id="mpAI" style="display:flex;flex-direction:column;gap:inherit"></div></section>
         <section class="setpane" data-pane="data" role="tabpanel">
           ${grp("Backup", "Download everything as a file you can keep or import later.", `<div class="chiprow"><button type="button" class="btn primary" data-act="export" data-kind="json" style="flex:none">Export backup (.json)</button><button type="button" class="btn" data-act="export" data-kind="csv">Tasks as spreadsheet (.csv)</button></div>`)}
@@ -4221,6 +4222,7 @@ function openSettingsSheet(section) {
   showPane(pane);
   if (window.mpNotify) window.mpNotify.render(document.getElementById("mpNotify"));
   if (window.mpAI) window.mpAI.render(document.getElementById("mpAI"));
+  if (window.mpMail) window.mpMail.render(document.getElementById("mpMail"));
   let brs = (s.breaks || []).map(b => ({ ...b }));
   const drawBr = () => { $("#sBrList").innerHTML = breaksHTML(brs); };
   drawBr();
