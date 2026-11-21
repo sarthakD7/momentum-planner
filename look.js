@@ -39,6 +39,18 @@ body:not([data-view="stats"]) .acct{display:none}
 .scrim.pillpop{align-items:flex-start!important;justify-content:center;padding:calc(var(--toph,48px) + 8px) 8px 8px;background:rgba(8,12,18,.28)}
 .scrim.pillpop>.sheet,.scrim.pillpop>form.sheet{width:min(400px,100%);max-height:min(78vh,640px);border-radius:28px!important;margin:0!important;align-self:flex-start!important;box-shadow:0 20px 60px -12px rgba(0,0,0,.55)}
 @media (min-width:700px){.scrim.pillpop{justify-content:flex-end;padding-right:16px}}
+/* no background blur behind pills while they animate: much smoother */
+.scrim.pillpop{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.scrim.pillpop>.sheet{will-change:clip-path}
+/* laptop and tablet: the panel is the top bar grown downwards (same position, same width) */
+@media (min-width:761px){
+  .scrim.pillpop.pillbar{justify-content:flex-start!important;padding:var(--barT,8px) 0 16px var(--barL,12px)!important;background:rgba(8,12,18,.22)}
+  .scrim.pillpop.pillbar>.sheet{width:var(--barW,calc(100% - 24px))!important;max-width:none;border-radius:22px!important;max-height:min(82vh,760px)}
+  .scrim.pillpop.pillbar>.sheet>*{width:100%;max-width:860px;margin-inline:auto!important;box-sizing:border-box}
+}
+/* menu highlight: a softer glide, no bounce */
+.nind{transition:transform .5s cubic-bezier(.32,.72,0,1),width .45s cubic-bezier(.32,.72,0,1),height .45s cubic-bezier(.32,.72,0,1),opacity .25s ease!important;will-change:transform}
+@media (prefers-reduced-motion:reduce){.nind{transition:opacity .2s!important}}
 @media (max-width:760px){.bnav{touch-action:none}}
 
 /* ---------- legibility ---------- */
@@ -195,59 +207,114 @@ document.addEventListener("click", e => {
 }, true);
 document.addEventListener("keydown", () => { origin = null; }, true);   // keyboard-opened search: no pill animation
 
-function grow(scrim) {
-  const o = origin; origin = null;
-  if (!o || Date.now() - o.at > 800) return;
-  const sheet = scrim.querySelector(".sheet"); if (!sheet) return;
-  scrim.classList.add("pillpop");
-  scrim.dataset.from = o.id;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const s = sheet.getBoundingClientRect(), b = o.rect;
-  // clip the sheet down to the button's shape, then open it out
-  const top = Math.max(0, b.top - s.top), left = Math.max(0, b.left - s.left), right = Math.max(0, s.right - b.right), bottom = Math.max(0, s.bottom - b.bottom);
-  const r = Math.min(b.height / 2, 24);
-  sheet.animate([
-    { clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px round ${r}px)`, transform: `translateY(${Math.min(0, b.top - s.top) * .2}px)` },
-    { clipPath: `inset(0px 0px 0px 0px round 28px)`, transform: "none" },
-  ], { duration: 420, easing: "cubic-bezier(.2,.9,.22,1.08)" });
-  [...sheet.children].forEach((c, i) => c.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: 120 + i * 25, easing: "ease-out", fill: "backwards" }));
-  scrim.animate([{ backgroundColor: "rgba(8,12,18,0)" }, { backgroundColor: "rgba(8,12,18,.28)" }], { duration: 300, easing: "ease-out" });
+const EASE_OUT = "cubic-bezier(.32,.72,0,1)";     // even glide with a soft landing (iOS sheet curve)
+const EASE_IN_OUT = "cubic-bezier(.45,0,.2,1)";
+const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const wide = () => innerWidth > 760;
+const topBar = () => { const h = document.querySelector("header.top"); return h && h.getClientRects().length ? h : null; };
+// clip-path inset that crops the sheet down to rectangle b
+const insetTo = (s, b, r) => `inset(${Math.max(0, b.top - s.top)}px ${Math.max(0, s.right - b.right)}px ${Math.max(0, s.bottom - b.bottom)}px ${Math.max(0, b.left - s.left)}px round ${r}px)`;
+function fadeKids(sheet, show) {
+  [...sheet.children].forEach((c, i) => c.animate(show
+    ? [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }]
+    : [{ opacity: 1 }, { opacity: 0 }],
+    show ? { duration: 340, delay: 150 + Math.min(i, 8) * 28, easing: EASE_OUT, fill: "backwards" } : { duration: 150, easing: "ease-in", fill: "forwards" }));
 }
 
-// Reverse: when a pill closes, put a copy back for a moment and shrink it into its button
+function grow(scrim) {
+  const o = origin; origin = null;
+  if (!o || Date.now() - o.at > 800) return false;
+  const sheet = scrim.querySelector(".sheet"); if (!sheet) return false;
+  scrim.classList.add("pillpop");
+  scrim.dataset.from = o.id;
+  // laptop and tablet: the whole top bar grows down into the panel
+  const bar = wide() && topBar();
+  if (bar) {
+    const h = bar.getBoundingClientRect();
+    scrim.classList.add("pillbar");
+    scrim.style.setProperty("--barT", h.top + "px"); scrim.style.setProperty("--barL", h.left + "px"); scrim.style.setProperty("--barW", h.width + "px");
+  }
+  if (calm()) return true;
+  const s = sheet.getBoundingClientRect();
+  const from = bar ? bar.getBoundingClientRect() : o.rect;
+  const r0 = bar ? 22 : Math.min(from.height / 2, 24), r1 = bar ? 22 : 28;
+  sheet.animate([{ clipPath: insetTo(s, from, r0) }, { clipPath: `inset(0px 0px 0px 0px round ${r1}px)` }], { duration: bar ? 560 : 500, easing: EASE_OUT });
+  fadeKids(sheet, true);
+  scrim.animate([{ backgroundColor: "rgba(8,12,18,0)" }, { backgroundColor: getComputedStyle(scrim).backgroundColor }], { duration: 400, easing: "ease-out" });
+  return true;
+}
+
+// Ordinary sheets (Settings, task details…): rise in softly
+function rise(scrim) {
+  if (calm()) return;
+  const sheet = scrim.querySelector(".sheet"); if (!sheet) return;
+  const bottom = !wide();   // phones: bottom sheet slides up; bigger screens: centred card settles in
+  sheet.animate(bottom
+    ? [{ transform: "translateY(40px)", opacity: 0 }, { transform: "none", opacity: 1 }]
+    : [{ transform: "translateY(12px) scale(.97)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 420, easing: EASE_OUT });
+  scrim.animate([{ backgroundColor: "rgba(8,12,18,0)" }, { backgroundColor: getComputedStyle(scrim).backgroundColor }], { duration: 320, easing: "ease-out" });
+}
+
+// Closing: keep a copy on screen for a moment and play the opening in reverse
 function shrink(scrim) {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const btn = document.getElementById(scrim.dataset.from || ""); if (!btn || !btn.getClientRects().length) return;
+  if (calm()) return;
+  const sheet = scrim.querySelector(".sheet"); if (!sheet) return;
+  const pill = scrim.classList.contains("pillpop");
+  const btn = pill ? (scrim.classList.contains("pillbar") ? topBar() : document.getElementById(scrim.dataset.from || "")) : null;
+  if (pill && (!btn || !btn.getClientRects().length)) return;
   const ghost = document.createElement("div");
   ghost.id = "pillGhost"; ghost.style.cssText = "position:fixed;inset:0;z-index:40;pointer-events:none";
   ghost.appendChild(scrim); document.body.appendChild(ghost);
   scrim.removeAttribute("data-act");
-  const sheet = scrim.querySelector(".sheet"); if (!sheet) { ghost.remove(); return; }
-  const s = sheet.getBoundingClientRect(), b = btn.getBoundingClientRect();
-  const top = Math.max(0, b.top - s.top), left = Math.max(0, b.left - s.left), right = Math.max(0, s.right - b.right), bottom = Math.max(0, s.bottom - b.bottom);
-  const r = Math.min(b.height / 2, 24);
-  [...sheet.children].forEach(c => c.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: "ease-in", fill: "forwards" }));
-  const a = sheet.animate([
-    { clipPath: "inset(0px 0px 0px 0px round 28px)" },
-    { clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px round ${r}px)` },
-  ], { duration: 320, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
-  scrim.animate([{ backgroundColor: getComputedStyle(scrim).backgroundColor, backdropFilter: getComputedStyle(scrim).backdropFilter }, { backgroundColor: "rgba(8,12,18,0)", backdropFilter: "none" }], { duration: 300, easing: "ease-in", fill: "forwards" });
+  const bg = getComputedStyle(scrim).backgroundColor;
+  let a;
+  if (pill) {
+    const s = sheet.getBoundingClientRect(), b = btn.getBoundingClientRect();
+    const bar = scrim.classList.contains("pillbar");
+    fadeKids(sheet, false);
+    a = sheet.animate([{ clipPath: `inset(0px 0px 0px 0px round ${bar ? 22 : 28}px)` }, { clipPath: insetTo(s, b, bar ? 22 : Math.min(b.height / 2, 24)) }],
+      { duration: bar ? 420 : 380, easing: EASE_IN_OUT, fill: "forwards" });
+  } else {
+    a = sheet.animate(!wide()
+      ? [{ transform: "none", opacity: 1 }, { transform: "translateY(40px)", opacity: 0 }]
+      : [{ transform: "none", opacity: 1 }, { transform: "translateY(8px) scale(.97)", opacity: 0 }], { duration: 260, easing: "cubic-bezier(.4,0,1,1)", fill: "forwards" });
+  }
+  scrim.animate([{ backgroundColor: bg }, { backgroundColor: "rgba(8,12,18,0)" }], { duration: pill ? 380 : 260, easing: "ease-in", fill: "forwards" });
   a.onfinish = a.oncancel = () => ghost.remove();
-  setTimeout(() => ghost.remove(), 600);
+  setTimeout(() => ghost.remove(), 700);
 }
 
 function watchSheets() {
   const root = document.getElementById("sheetRoot"); if (!root) return;
+  const isScrim = n => n.nodeType === 1 && n.classList && n.classList.contains("scrim");
   new MutationObserver(muts => {
-    for (const m of muts) for (const n of m.removedNodes) if (n.nodeType === 1 && n.classList && n.classList.contains("pillpop") && !root.querySelector(".scrim")) shrink(n);
-    for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) {
-      const scrim = n.classList && n.classList.contains("scrim") ? n : n.querySelector && n.querySelector(".scrim");
-      if (scrim) grow(scrim);
-      // the Appearance pane gets the transparency slider
-      const look = root.querySelector('.setpane[data-pane="appearance"]');
-      if (look && !look.querySelector("#mpLook")) { const d = document.createElement("div"); d.id = "mpLook"; look.appendChild(d); renderLook(d); }
+    const removed = muts.flatMap(m => [...m.removedNodes]).filter(isScrim);
+    const added = muts.flatMap(m => [...m.addedNodes]).map(n => isScrim(n) ? n : n.querySelector && n.querySelector(".scrim")).filter(Boolean);
+    // closed (nothing left open): play it out
+    if (removed.length && !root.querySelector(".scrim")) shrink(removed[removed.length - 1]);
+    for (const scrim of added) {
+      if (!scrim.isConnected) continue;
+      if (!grow(scrim) && !removed.length) rise(scrim);   // a sheet swapped for another (re-render) doesn't animate again
     }
+    // the Appearance pane gets the transparency slider
+    const look = root.querySelector('.setpane[data-pane="appearance"]');
+    if (look && !look.querySelector("#mpLook")) { const d = document.createElement("div"); d.id = "mpLook"; look.appendChild(d); renderLook(d); }
   }).observe(root, { childList: true });
+}
+
+// Switching screens: the new screen fades up gently
+function watchViews() {
+  let last = document.body.dataset.view;
+  new MutationObserver(() => {
+    const v = document.body.dataset.view; if (v === last) return; last = v;
+    if (calm()) return;
+    // panes only: never the fixed menu or top bar (moving their parent would make them jump)
+    document.querySelectorAll(".app > .pane, .app > .shell > .pane, .app > :not(nav):not(.bnav):not(#bnav):not(header)").forEach(el => {
+      if (!el.getClientRects().length || getComputedStyle(el).position === "fixed") return;
+      if (el.querySelector("#bnav, .bnav")) return;
+      el.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 380, easing: EASE_OUT });
+    });
+  }).observe(document.body, { attributes: true, attributeFilter: ["data-view"] });
 }
 
 function slideToPick() {
@@ -273,7 +340,7 @@ function trackTop() {
 
 async function start() {
   keepLast();
-  addBadge(); watchSheets(); slideToPick(); trackTop();
+  addBadge(); watchSheets(); watchViews(); slideToPick(); trackTop();
   // the sign-in client is created by boot.js a moment after the page starts
   for (let i = 0; i < 100 && !window.mpSupabase; i++) await new Promise(r => setTimeout(r, 100));
   user = await who();
