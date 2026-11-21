@@ -112,3 +112,28 @@ function addEdges() {
   }
 }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addEdges); else addEdges();
+
+// Diagnostics: one small note per device in the user's own database (doc debug/<device>), so layout
+// problems on a specific phone or tablet can be checked without guessing. Overwritten on each open.
+addEventListener("load", () => setTimeout(async () => {
+  try {
+    const db = window.claude && (await window.claude.use("db")); if (!db) return;
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;visibility:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)";
+    document.body.appendChild(probe); const cs = getComputedStyle(probe);
+    const insets = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map(v => parseFloat(v) || 0); probe.remove();
+    const edge = document.querySelector(".mp-edge.b");
+    const mq = q => matchMedia(q).matches;
+    const ua = navigator.userAgent;
+    const kind = (/Android/.test(ua) ? (/Mobile/.test(ua) ? "android-phone" : "android-tablet") : /iPad|Macintosh/.test(ua) && navigator.maxTouchPoints > 1 ? "ipad" : /iPhone/.test(ua) ? "iphone" : /Windows/.test(ua) ? "windows" : "other") + (mq("(display-mode: standalone)") ? "-app" : "-tab");
+    await db.doc("debug/" + kind).set({
+      at: new Date().toISOString(), version: window.mpVersion || "", ua,
+      standalone: mq("(display-mode: standalone)"), fullscreen: mq("(display-mode: fullscreen)"), minimalUi: mq("(display-mode: minimal-ui)"),
+      pointerCoarse: mq("(pointer: coarse)"), anyPointerCoarse: mq("(any-pointer: coarse)"), hover: mq("(hover: hover)"),
+      w: innerWidth, h: innerHeight, screen: [screen.width, screen.height], dpr: devicePixelRatio, insets,
+      bar: meta.getAttribute("content"), navbar: getComputedStyle(document.documentElement).getPropertyValue("--navbar").trim(),
+      edgeShown: !!edge && getComputedStyle(edge).display !== "none",
+      scene: document.documentElement.dataset.scene || "none", style: document.documentElement.dataset.style || "", theme: document.documentElement.dataset.theme || "auto",
+    });
+  } catch (e) { console.warn("diagnostics", e); }
+}, 4000));
