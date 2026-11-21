@@ -115,7 +115,7 @@ if (document.readyState === "loading") document.addEventListener("DOMContentLoad
 
 // Diagnostics: one small note per device in the user's own database (doc debug/<device>), so layout
 // problems on a specific phone or tablet can be checked without guessing. Overwritten on each open.
-addEventListener("load", () => setTimeout(async () => {
+const diag = () => setTimeout(async () => {
   try {
     const db = window.claude && (await window.claude.use("db")); if (!db) return;
     const probe = document.createElement("div");
@@ -136,4 +136,6 @@ addEventListener("load", () => setTimeout(async () => {
       scene: document.documentElement.dataset.scene || "none", style: document.documentElement.dataset.style || "", theme: document.documentElement.dataset.theme || "auto",
     });
   } catch (e) { console.warn("diagnostics", e); }
-}, 4000));
+}, 4000);
+// this module can load after the page's load event, so don't rely on it
+if (document.readyState === "complete") diag(); else addEventListener("load", diag, { once: true });
