@@ -22,7 +22,7 @@ const G_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") || "";
 const REDIRECT = SB_URL.replace(/\/$/, "") + "/functions/v1/mailscan/callback";
 const APP_URL = "https://sarthakd7.github.io/momentum-planner/";
 const TZ = "Asia/Kolkata";
-const MAX_MSGS = 60, MAX_CHARS = 7000, BATCH = 6, BUDGET_MS = 80_000; // stay well under the 150 s limit
+const MAX_MSGS = 60, MAX_CHARS = 7000, BATCH = 6, BUDGET_MS = 110_000; // hard stop before Supabase's 150 s limit
 const db = createClient(SB_URL, SERVICE, { auth: { persistSession: false } });
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
@@ -36,22 +36,22 @@ function aiProvider() {
   return "";
 }
 // One call to the provider; errors carry the HTTP status so busy/overloaded replies can be retried
-async function aiOnce(p: string, model: string | undefined, prompt: string): Promise<string> {
+async function aiOnce(p: string, model: string | undefined, prompt: string, signal: AbortSignal): Promise<string> {
   const fail = (r: Response, d: any) => Object.assign(new Error("AI " + r.status + ": " + (d?.error?.message || r.statusText)), { status: r.status });
   if (p === "anthropic") {
-    const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!, "anthropic-version": "2023-06-01", "content-type": "application/json" }, signal,
       body: JSON.stringify({ model: model || "claude-sonnet-5-5", max_tokens: 4000, system: "Reply with one JSON object only.", messages: [{ role: "user", content: prompt }] }) });
     const d = await r.json().catch(() => null); if (!r.ok) throw fail(r, d);
     return (d.content || []).map((b: any) => b.text || "").join("");
   }
   if (p === "gemini") {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-flash-latest"}:generateContent`, { method: "POST", headers: { "x-goog-api-key": Deno.env.get("GEMINI_API_KEY")!, "content-type": "application/json" },
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-flash-latest"}:generateContent`, { method: "POST", headers: { "x-goog-api-key": Deno.env.get("GEMINI_API_KEY")!, "content-type": "application/json" }, signal,
       body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4000 } }) });
     const d = await r.json().catch(() => null); if (!r.ok) throw fail(r, d);
     return (d.candidates?.[0]?.content?.parts || []).map((x: any) => x.text || "").join("");
   }
   if (p === "openai") {
-    const r = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { Authorization: "Bearer " + Deno.env.get("OPENAI_API_KEY"), "content-type": "application/json" },
+    const r = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { Authorization: "Bearer " + Deno.env.get("OPENAI_API_KEY"), "content-type": "application/json" }, signal,
       body: JSON.stringify({ model: model || "gpt-6-luna", response_format: { type: "json_object" }, messages: [{ role: "system", content: "Reply with one JSON object only." }, { role: "user", content: prompt }] }) });
     const d = await r.json().catch(() => null); if (!r.ok) throw fail(r, d);
     return d.choices?.[0]?.message?.content || "";
@@ -62,18 +62,21 @@ async function aiOnce(p: string, model: string | undefined, prompt: string): Pro
 // Retries when the provider is busy (429/5xx), and on Gemini falls back to the lighter model
 const FALLBACK: Record<string, string[]> = { gemini: ["gemini-flash-latest", "gemini-3.5-flash-lite"], anthropic: ["claude-sonnet-5-5", "claude-haiku-5-5"], openai: ["gpt-6-luna"] };
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-async function ai(prompt: string): Promise<string> {
+async function ai(prompt: string, deadline: number): Promise<string> {
   const p = aiProvider(), set = Deno.env.get("MAIL_AI_MODEL");
   const models = set ? [set, ...(FALLBACK[p] || []).filter(m => m !== set)] : (FALLBACK[p] || [undefined as any]);
   let last: any;
   for (const m of models) {
     for (let attempt = 0; attempt < 3; attempt++) {
-      try { return await aiOnce(p, m, prompt); }
+      const left = deadline - Date.now();
+      if (left < 12_000) throw last || Object.assign(new Error("ran out of time"), { status: 504 });
+      try { return await aiOnce(p, m, prompt, AbortSignal.timeout(Math.min(45_000, left - 3_000))); }
       catch (e: any) {
+        if (e?.name === "TimeoutError" || e?.name === "AbortError") e = Object.assign(new Error("AI took too long to answer"), { status: 504 });
         last = e;
         const busy = e.status === 429 || (e.status >= 500 && e.status < 600);
         if (!busy) throw e;              // bad key, bad request: no point retrying
-        if (attempt < 2) await sleep(attempt ? 6000 : 2000);
+        if (attempt < 2) await sleep(Math.min(attempt ? 6000 : 2000, Math.max(0, deadline - Date.now() - 15_000)));
       }
     }
   }
@@ -95,7 +98,7 @@ async function accessToken(refresh: string) {
   return d.access_token as string;
 }
 async function gmail(token: string, path: string) {
-  const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/" + path, { headers: { Authorization: "Bearer " + token } });
+  const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/" + path, { headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(20_000) });
   const d = await r.json();
   if (!r.ok) throw new Error("Gmail " + r.status + ": " + (d.error?.message || ""));
   return d;
@@ -150,7 +153,7 @@ function istNow() {
 }
 const rid = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), b => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
 
-async function extract(mails: { id: string; text: string }[]) {
+async function extract(mails: { id: string; text: string }[], deadline: number) {
   const now = istNow();
   const prompt = `You read a student's institute emails and list every UPCOMING dated item they may need to attend, do or submit: meetings, seminars, colloquia, talks, classes or class changes, exams, deadlines, submissions, registrations, feedback windows.
 Today is ${now.weekday} ${now.date}, ${now.time} in India (IST, UTC+05:30).
@@ -164,7 +167,7 @@ A deadline with no time uses start 1439. Example: 11am colloquium on 19 Nov → 
 If nothing qualifies, return {"items":[]}.
 
 ${mails.map((m, i) => `=== Email ${i} ===\n${m.text}`).join("\n\n")}`;
-  const out = parseJSON(await ai(prompt));
+  const out = parseJSON(await ai(prompt, deadline));
   const items: any[] = [];
   for (const it of out.items || []) {
     const m = mails[+it.mail]; if (!m || !/^\d{4}-\d{2}-\d{2}$/.test(it.date || "") || it.date < now.date) continue;
@@ -197,7 +200,7 @@ async function mergeFinds(owner: string, fresh: any[]) {
 const ymd = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "/");
 
 async function scanOne(link: any) {
-  const owner = link.owner, t0 = Date.now(), late = () => Date.now() - t0 > BUDGET_MS;
+  const owner = link.owner, deadline = Date.now() + BUDGET_MS, left = () => deadline - Date.now();
   let token: string;
   try { token = await accessToken(link.refresh_token); }
   catch (e: any) {
@@ -217,18 +220,22 @@ async function scanOne(link: any) {
   } while (pageToken && ids.length < MAX_MSGS);
 
   const mails = [];
-  for (const id of ids.slice(0, MAX_MSGS)) { if (late()) break; try { mails.push(await messageText(token, id)); } catch (e) { console.error("read failed", id, e); } }
+  for (const id of ids.slice(0, MAX_MSGS)) { if (left() < 70_000) break; try { mails.push(await messageText(token, id)); } catch (e) { console.error("read failed", id, e); } }
 
-  const found: any[] = [];
+  const added: any[] = [];
   let aiFailed = "";
   let more = ids.length > mails.length;
   for (let i = 0; i < mails.length; i += BATCH) {
-    if (late()) { more = true; break; }
+    if (left() < 15_000) { more = true; break; }
     const chunk = mails.slice(i, i + BATCH);
-    try { found.push(...await extract(chunk)); for (const m of chunk) processed.add(m.id); }
-    catch (e: any) { aiFailed = e.message; more = true; console.error("extract failed", e); }  // leave these unprocessed so the next run retries
+    try {
+      const items = await extract(chunk, deadline);
+      added.push(...await mergeFinds(owner, items));
+      for (const m of chunk) processed.add(m.id);
+      // save progress after each batch, so a run that gets cut off keeps what it finished
+      await db.rpc("mail_link_update", { p_owner: owner, p_processed: [...processed].slice(-500), p_result: `Scanning… ${added.length} found so far.`, p_scanned: false });
+    } catch (e: any) { aiFailed = e.message; more = true; console.error("extract failed", e); }  // leave these unprocessed so the next run retries
   }
-  const added = await mergeFinds(owner, found);
   const list = [...processed].slice(-500);
   const result = aiFailed && !added.length
     ? `Read ${mails.length} new email${mails.length === 1 ? "" : "s"}, but the AI step failed: ${aiFailed.slice(0, 160).replace(/\.?$/, ".")}`
