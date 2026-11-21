@@ -21,6 +21,7 @@
   };
   // Stand-in for claude.ai's "sample" capability: whichever AI provider is set in Settings → AI
   import(new URL("mail.js", scriptSrc || location.href).href).catch(e => console.error("Email scan module failed", e));
+  import(new URL("bars.js", scriptSrc || location.href).href).catch(e => console.error("Bar colour module failed", e));
   const aiMod = import(new URL("ai.js", scriptSrc || location.href).href).catch(e => { console.error("AI module failed", e); return null; });
   const sample = async () => { const m = await aiMod; return m && m.configured() ? m.sampler : null; };
   window.claude = { use: async name => (name === "db" ? dbReady : name === "downloads" ? downloads : name === "sample" ? sample() : null) };
