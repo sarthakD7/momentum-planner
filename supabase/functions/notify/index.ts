@@ -54,7 +54,7 @@ const fmt = (m: number) => { const h = Math.floor(m / 60) % 24, mm = m % 60, ap 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 // ---------- preferences ----------
-const PDEF = { on: true, tz: "Asia/Kolkata", task: true, taskLead: 5, habit: true, wake: true, focus: true, evening: true, eveningAt: 1290, deadline: true };
+const PDEF = { on: true, tz: "Asia/Kolkata", task: true, taskLead: 5, habit: true, nudge: true, nudgeAt: 780, nudgeAt2: 1110 as number | null, wake: true, focus: true, evening: true, eveningAt: 1290, deadline: true };
 type Prefs = typeof PDEF;
 
 // ---------- what's due ----------
@@ -96,6 +96,24 @@ function dueNotes(p: Prefs, docs: Map<string, any>, nowMs: number): Note[] {
     const at = sc.start - (sc.before || 0) - (h.remindMin ?? 15);
     if (L.min >= at && L.min <= at + 10) out.push({ key: `habit:${h.id}:${L.date}`, tag: "habit-" + h.id,
       title: `${h.name} at ${fmt(sc.start)}`, body: sc.before ? `Leave in about ${Math.max(0, sc.start - sc.before - L.min)} min.` : `Coming up in ${Math.max(0, sc.start - L.min)} min.` });
+  }
+
+  // 2b. habit nudges: at the chosen times, the habits still unticked today (habits with their own time get their own reminder)
+  if (p.nudge) for (const at of [p.nudgeAt, p.nudgeAt2]) {
+    if (at == null || L.min < at || L.min > at + 15) continue;
+    const due = (h: any, d: string, dow: number) => !h.sched || !Array.isArray(h.sched.days) || h.sched.days.includes(dow);
+    const timed = (h: any) => h.remind !== false && h.sched && h.sched.start != null;
+    const left = habits.filter(h => !h.archived && due(h, L.date, L.dow) && !(h.days && h.days[L.date]) && !timed(h) && (!h.created || h.created < nowMs));
+    if (!left.length) continue;
+    // current streak (days in a row ticked, counting back from yesterday, skipping days the habit isn't due)
+    const streak = (h: any) => { let n = 0, d = addDays(L.date, -1);
+      for (let i = 0; i < 400; i++, d = addDays(d, -1)) { const dow = new Date(d + "T00:00:00Z").getUTCDay(); if (!due(h, d, dow)) continue; if (h.days && h.days[d]) n++; else break; } return n; };
+    const ranked = left.map(h => ({ h, s: streak(h) })).sort((a, b) => b.s - a.s);
+    const top = ranked[0];
+    out.push({ key: `habitnudge:${L.date}:${at}`, tag: "habit-nudge",
+      title: left.length === 1 ? `Habit reminder: ${left[0].name}` : `${plural(left.length, "habit")} left today`,
+      body: (left.length > 1 ? ranked.slice(0, 4).map(x => x.h.name).join(", ") + (left.length > 4 ? "…" : "") + ". " : "")
+        + (top.s >= 2 ? `Keep your ${top.s}-day ${left.length > 1 ? top.h.name + " " : ""}streak going.` : "Tick them off to keep your momentum.") });
   }
 
   // 3. morning wake-up check-in

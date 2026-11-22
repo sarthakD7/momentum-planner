@@ -1,7 +1,7 @@
 // Momentum Planner: Reminders + Account settings (renders into the Settings → Reminders pane).
 // init(supabase|null, db|null) is called by boot.js; render(el) by the Settings sheet.
 
-const PDEF = { on: true, tz: "", task: true, taskLead: 5, habit: true, wake: true, focus: true, evening: true, eveningAt: 1290, deadline: true };
+const PDEF = { on: true, tz: "", task: true, taskLead: 5, habit: true, nudge: true, nudgeAt: 780, nudgeAt2: 1110, wake: true, focus: true, evening: true, eveningAt: 1290, deadline: true };
 let SB = null, DB = null;
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -84,7 +84,11 @@ async function render(el) {
     grp("What to remind me about", "Applies on all your devices. Changes save right away.",
       `${ck("t", "task", "Tasks starting", "For tasks with a time on the timeline.")}
        <label class="field">How early<select data-np="taskLead">${[0, 5, 10, 15, 30].map(m => `<option value="${m}"${p.taskLead === m ? " selected" : ""}>${m ? m + " min before" : "At start time"}</option>`).join("")}</select></label>
-       ${ck("h", "habit", "Scheduled habits", "Uses each habit's own reminder time.")}
+       ${ck("h", "habit", "Habits with a set time", "Before each one starts, using the habit's own reminder time.")}
+       ${ck("n", "nudge", "Habit nudges", "At these times, a reminder of the habits you haven't ticked yet today, with your streak.")}
+       <div class="row2" style="display:flex;gap:8px"><label class="field" style="flex:1">First nudge<input type="time" data-np="nudgeAt" value="${p.nudgeAt != null ? hhmm(p.nudgeAt) : ""}"></label>
+       <label class="field" style="flex:1">Second nudge<input type="time" data-np="nudgeAt2" value="${p.nudgeAt2 != null ? hhmm(p.nudgeAt2) : ""}"></label></div>
+       <div class="note" style="margin-top:-4px">Clear a time to skip that nudge.</div>
        ${ck("w", "wake", "Morning “When did you wake up?”", "At your routine's wake-up time, if you haven't logged it yet.")}
        ${ck("f", "focus", "Focus session and break ended", "Arrives even with your phone locked.")}
        ${ck("e", "evening", "Evening check-in", "Unticked habits, part-done tasks and an empty tomorrow.")}
@@ -126,8 +130,9 @@ async function render(el) {
   el.onchange = async e => {
     const i = e.target.closest("[data-np]"); if (!i) return;
     const k = i.dataset.np;
-    const v = i.type === "checkbox" ? i.checked : k === "eveningAt" ? (([h, m]) => +h * 60 + +m)(i.value.split(":")) : +i.value;
+    const v = i.type === "checkbox" ? i.checked : i.type === "time" ? (i.value ? (([h, m]) => +h * 60 + +m)(i.value.split(":")) : null) : +i.value;
     if (k === "eveningAt" && !Number.isFinite(v)) return;
+    if (i.type === "time" && v != null && !Number.isFinite(v)) return;
     try { await savePrefs({ [k]: v }); } catch (err) { say("Couldn't save: " + (err.message || err), true); }
   };
 }

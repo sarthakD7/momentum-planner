@@ -870,6 +870,21 @@ kbd{font-family:var(--f-mono);font-size:11px;border:1px solid var(--line);border
 .rgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
 .rcard{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:10px;min-width:0}
 .rcard.wide{grid-column:1/-1}
+.wkchart{width:100%;height:auto;display:block;overflow:visible}
+.wkchart .wg{stroke:var(--line);stroke-width:1}
+.wkchart .wt{fill:var(--muted);font:600 9px var(--f-body,inherit)}
+.wkchart .wp{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:4 4;opacity:.8}
+.wkchart .wl{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.wkchart .wd{fill:var(--good);stroke:var(--surface);stroke-width:1.5}
+.wkchart .wd.late{fill:var(--warn)}
+.wksum{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
+.wksum b{color:var(--ink);font-size:14px}
+.wkleg{display:flex;gap:12px;font-size:11px;color:var(--muted)}
+.wkleg i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:-1px;background:var(--good)}
+.wkleg i.late{background:var(--warn)}
+.wkleg i.wpk{width:14px;height:0;border-radius:0;background:none;border-top:2px dashed var(--muted);vertical-align:3px}
+.wkhist{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.wkhist>b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .rcard h3{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:var(--muted);display:flex;align-items:center;gap:6px}
 .insights ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
 .glist{margin:0;padding-left:18px;font-size:14px}
@@ -2080,9 +2095,46 @@ function openWakeSheet(auto) {
     <p class="note" style="margin:-6px 0 0">When did you wake up? ${planned != null ? `Your plan was ${fmtMin(planned)}. ` : ""}If you're late, the morning blocks re-fit before lunch and their tasks move with them.</p>
     <label class="field">Woke up at<input type="time" id="wkTime" step="300" value="${hhmm(cur ?? m)}"></label>
     <div class="chiprow">${[-60, -30, -15].map(x => `<button type="button" class="pillbtn" data-wk="${Math.max(0, m + x)}">${fmtMin(Math.max(0, m + x))}</button>`).join("")}<button type="button" class="pillbtn" data-wk="${m}">Just now</button></div>
+    ${auto ? "" : `<div class="wkhist"><b>Last 14 days</b>${wakeTrendHTML(14)}</div>`}
     <div class="sheetbtns">${cur != null ? `<button type="button" class="btn" data-act="wake-clear">Clear</button>` : ""}<span class="spacer"></span><button type="button" class="btn" data-act="close">${auto ? "Not now" : "Cancel"}</button><button type="submit" class="btn primary" style="flex:none">Save</button></div></form></div>`;
   $("#wakeForm").addEventListener("click", e => { const b = e.target.closest("[data-wk]"); if (b) $("#wkTime").value = hhmm(+b.dataset.wk); if (e.target.closest('[data-act="wake-clear"]')) { e.stopPropagation(); putWake(today(), null); closeSheet(); toast("Wake-up time cleared. Your planned morning is back."); } });
   $("#wakeForm").addEventListener("submit", e => { e.preventDefault(); const v = hmv($("#wkTime").value); if (v == null) return; closeSheet(); logWake(v); });
+}
+/* ---------- wake-up trend ---------- */
+// one point per day (or per month for a year): w = logged wake-up, p = planned wake-up
+function wakePoints(dates) {
+  const log = state.wakeLog || {};
+  return dates.map(d => { const b = routineOn(d) ? wakeBlockOf(routineFor(d, true)) : null; return { d, w: log[d] ?? null, p: b ? b.start : null }; });
+}
+function wakeSummary(pts) {
+  const got = pts.filter(x => x.w != null); if (!got.length) return null;
+  const vs = got.filter(x => x.p != null);
+  return { n: got.length, avg: Math.round(got.reduce((a, x) => a + x.w, 0) / got.length), late: vs.length ? Math.round(vs.reduce((a, x) => a + (x.w - x.p), 0) / vs.length) : null,
+    onTime: vs.filter(x => x.w <= x.p + 15).length, judged: vs.length, early: Math.min(...got.map(x => x.w)), lateMost: Math.max(...got.map(x => x.w)) };
+}
+function wakeChartHTML(pts, labels, opts = {}) {
+  const sm = wakeSummary(pts);
+  if (!sm) return `<p class="note" style="margin:0">No wake-up times logged ${opts.empty || "in this period"}. Log one with the ☀ button on the Dashboard${routineOn(today()) ? "" : " (turn on a daily routine in Settings for the morning prompt)"}.</p>`;
+  const vals = pts.flatMap(x => [x.w, x.p]).filter(v => v != null);
+  let lo = Math.floor((Math.min(...vals) - 15) / 60) * 60, hi = Math.ceil((Math.max(...vals) + 15) / 60) * 60; if (hi - lo < 120) hi = lo + 120;
+  const W = 320, H = 150, L = 36, R = 8, T = 8, B = 20, n = pts.length;
+  const x = i => L + (n === 1 ? (W - L - R) / 2 : i * (W - L - R) / (n - 1)), y = m => T + (m - lo) / (hi - lo) * (H - T - B);
+  let g = "";
+  for (let t = lo; t <= hi; t += 60) g += `<line class="wg" x1="${L}" x2="${W - R}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}"/><text class="wt" x="${L - 5}" y="${(y(t) + 3).toFixed(1)}" text-anchor="end">${fmtMin(t)}</text>`;
+  // planned: a dashed line through the days that have a plan
+  const seg = key => { let d = "", on = false; pts.forEach((p, i) => { if (p[key] == null) { on = false; return; } d += `${on ? "L" : "M"}${x(i).toFixed(1)} ${y(p[key]).toFixed(1)} `; on = true; }); return d; };
+  const got = pts.map((p, i) => [p, i]).filter(([p]) => p.w != null);
+  const line = got.map(([p, i], k) => `${k ? "L" : "M"}${x(i).toFixed(1)} ${y(p.w).toFixed(1)}`).join(" ");
+  const dots = got.map(([p, i]) => { const late = p.p != null && p.w > p.p + 15; return `<circle class="wd${late ? " late" : ""}" cx="${x(i).toFixed(1)}" cy="${y(p.w).toFixed(1)}" r="${n > 40 ? 2.6 : 3.6}"><title>${esc(opts.tip ? opts.tip(p) : dayLabel(p.d))} · up at ${fmtMin(p.w)}${p.p != null ? ` · plan ${fmtMin(p.p)}` : ""}</title></circle>`; }).join("");
+  const xl = labels.map((l, i) => l ? `<text class="wt" x="${x(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${esc(l)}</text>` : "").join("");
+  const lateTxt = sm.late == null ? "" : Math.abs(sm.late) < 5 ? "right on plan" : `${fmtDur(Math.abs(sm.late))} ${sm.late > 0 ? "later" : "earlier"} than plan`;
+  return `<svg class="wkchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Wake-up times">${g}<path class="wp" d="${seg("p")}"/><path class="wl" d="${line}"/>${dots}${xl}</svg>
+    <div class="wksum"><span><b>${fmtMin(sm.avg)}</b> average${opts.unit ? "" : ` · ${sm.n} day${sm.n === 1 ? "" : "s"} logged`}</span>${lateTxt ? `<span>${lateTxt}</span>` : ""}${sm.judged && !opts.unit ? `<span>on time ${sm.onTime} of ${sm.judged}</span>` : ""}<span>earliest ${fmtMin(sm.early)} · latest ${fmtMin(sm.lateMost)}</span></div>
+    <div class="legend wkleg"><span><i class="wlk"></i>Woke up</span><span><i class="wlk late"></i>15+ min late</span><span><i class="wpk"></i>Planned</span></div>`;
+}
+function wakeTrendHTML(days = 14) {
+  const ds_ = []; for (let i = days - 1; i >= 0; i--) ds_.push(addDays(today(), -i));
+  return wakeChartHTML(wakePoints(ds_), ds_.map((d, i) => days <= 14 ? dayLabel(d, { weekday: "narrow" }) : (i % 7 === 0 ? String(parseD(d).getDate()) : "")), { empty: `in the last ${days} days` });
 }
 function maybeAskWake() {
   const sx = set(), t = today(), h = new Date().getHours();
@@ -3555,6 +3607,9 @@ function renderRetro() {
     for (let w = 0; w < 53; w++) { heat += `<div class="hcol">`; for (let k = 0; k < 7; k++) { const d = addDays(start, w * 7 + k); if (d.slice(0, 4) !== String(y) || d > today()) { heat += `<i class="hx"></i>`; continue; } const b = breakOn(d), sc = b ? 0 : dayScore(d).score; heat += `<i class="${b ? "hb" : ""}" style="--h:${(sc / 100).toFixed(2)}" title="${esc(dayLabel(d))} · ${b ? b.label : "momentum " + sc}"></i>`; } heat += `</div>`; }
     charts = `<div class="rcard"><h3>Tasks done by month</h3>${barsHTML(mDone, ml, mDone.map((v, i) => `${new Date(y, i, 1).toLocaleDateString(undefined, { month: "long" })} · ${v} done`), { noEnd: true })}</div>
       <div class="rcard"><h3>Focus hours by month</h3>${barsHTML(mFocus.map(v => Math.round(v / 6) / 10), ml, mFocus.map((v, i) => `${new Date(y, i, 1).toLocaleDateString(undefined, { month: "long" })} · ${fmtDur(v) || "0m"}`), { fmt: v => v + "h", noEnd: true })}</div>
+      <div class="rcard"><h3>${ic("sun", 14)} Wake-up time · monthly average</h3>${(() => { const log = state.wakeLog || {}; const pts = months.map(m => { const ks = Object.keys(log).filter(d => +d.slice(0, 4) === y && +d.slice(5, 7) === m + 1); const pl = ks.map(d => (wakePoints([d])[0] || {}).p).filter(v => v != null);
+        return { d: ds(new Date(y, m, 1)), w: ks.length ? Math.round(ks.reduce((a, d) => a + log[d], 0) / ks.length) : null, p: pl.length ? Math.round(pl.reduce((a, v) => a + v, 0) / pl.length) : null }; });
+        return wakeChartHTML(pts, ml, { unit: "month", tip: p => new Date(p.d).toLocaleDateString(undefined, { month: "long" }) + " average", empty: "this year (the log keeps the last 120 days)" }); })()}</div>
       <div class="rcard wide"><h3>Momentum, every day</h3><div class="heat" aria-label="Momentum heatmap">${heat}</div><div class="legend" style="display:flex"><span><i style="background:var(--surface-2);border-color:var(--line)"></i>Low</span><span><i style="background:var(--accent);border-color:var(--accent)"></i>High</span><span><i style="background:var(--good-soft);border-color:var(--good)"></i>Break</span></div></div>`;
   } else {
     const ds_ = []; for (let d = r.from; d <= r.to; d = addDays(d, 1)) ds_.push(d);
@@ -3562,7 +3617,8 @@ function renderRetro() {
     const fmn = ds_.map(d => ((state.flogs[d] && state.flogs[d].sessions) || []).reduce((s, x) => s + (x.min || 0), 0));
     const lab = ds_.map((d, i) => RT.span === "week" ? dayLabel(d, { weekday: "narrow" }) : (i % 5 === 0 ? String(parseD(d).getDate()) : ""));
     charts = `<div class="rcard"><h3>Done per day</h3>${barsHTML(dn, lab, ds_.map((d, i) => `${dayLabel(d)} · ${dn[i]} done${breakOn(d) ? " · break" : ""}`), { noEnd: true })}</div>
-      <div class="rcard"><h3>Focus per day</h3>${barsHTML(fmn, lab, ds_.map((d, i) => `${dayLabel(d)} · ${fmn[i]} min`), { fmt: v => v + "m", noEnd: true })}</div>`;
+      <div class="rcard"><h3>Focus per day</h3>${barsHTML(fmn, lab, ds_.map((d, i) => `${dayLabel(d)} · ${fmn[i]} min`), { fmt: v => v + "m", noEnd: true })}</div>
+      <div class="rcard"><h3>${ic("sun", 14)} Wake-up time</h3>${wakeChartHTML(wakePoints(ds_.filter(d => d <= today())), lab.slice(0, ds_.filter(d => d <= today()).length))}</div>`;
   }
   const lbTot = st.byLabel.work + st.byLabel.personal + st.byLabel.other || 1;
   const reasons = Object.entries(st.reasons).sort((a, b) => b[1] - a[1]).slice(0, 4);
@@ -4099,7 +4155,7 @@ function openHabitSheet(id) {
         <div class="chiprow" id="hfDays">${[1, 2, 3, 4, 5, 6, 0].map(d => `<button type="button" data-hday="${d}" aria-pressed="${(h.sched && h.sched.days || [1, 2, 3, 4, 5, 6]).includes(d)}">${WD[d]}</button>`).join("")}</div>
         <div class="row2"><label class="field">Starts<input type="time" id="hfStart" step="300" value="${hhmm(h.sched && h.sched.start != null ? h.sched.start : 1080)}"></label><label class="field">Length<select id="hfDur">${[15, 20, 30, 45, 60, 75, 90, 120].map(m => `<option value="${m}"${(h.sched && h.sched.dur || 60) === m ? " selected" : ""}>${fmtDur(m)}</option>`).join("")}</select></label></div>
         <div class="row2"><label class="field">Travel before<select id="hfBefore">${[0, 10, 15, 20, 30, 45].map(m => `<option value="${m}"${(h.sched ? h.sched.before || 0 : 0) === m ? " selected" : ""}>${m ? m + " min" : "None"}</option>`).join("")}</select></label><label class="field">Travel after<select id="hfAfter">${[0, 10, 15, 20, 30, 45].map(m => `<option value="${m}"${(h.sched ? h.sched.after || 0 : 0) === m ? " selected" : ""}>${m ? m + " min" : "None"}</option>`).join("")}</select></label></div>
-        <label class="check"><input type="checkbox" id="hfRemind"${h.remind !== false ? " checked" : ""}><span>Remind me on my phone<small>Adds one repeating event to Google Calendar, which notifies you before you need to leave.</small></span></label>
+        <label class="check"><input type="checkbox" id="hfRemind"${h.remind !== false ? " checked" : ""}><span>Remind me before it starts<small>Sent to your devices with reminders turned on (Settings → Reminders). Habits without a time are covered by the daily habit nudges.</small></span></label>
         <label class="field" id="hfRemWrap">Reminder<select id="hfRemMin">${[5, 10, 15, 30, 60].map(m => `<option value="${m}"${(h.remindMin ?? 15) === m ? " selected" : ""}>${m} min before</option>`).join("")}</select></label>
       </div>
       <p class="note" id="hfAnyNote" ${hSched(h) ? "hidden" : ""} style="margin:0">Do it whenever it feels right. It stays on your Habits list with its streak, with no fixed slot or reminder.</p>
@@ -4863,11 +4919,12 @@ init();
   .card[data-dir="l"]::after{right:-100px;color:var(--tmrw);background:var(--tmrw-soft)}
   .card.swipe-go::after{opacity:1}
 
-  /* Bottom menu pill: icons at their usual size; only the selected menu shows its name
-     (the other names stay available to screen readers) */
-  .bnav button span{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-  .bnav button[aria-pressed="true"] span{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;font-size:11px}
-  .bnav button{min-height:42px;justify-content:center}
+  /* Bottom dock: a fully round capsule with round icon buttons and no names
+     (names stay available to screen readers) */
+  .bnav button span,.bnav button[aria-pressed="true"] span{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  .bnav{border-radius:999px!important;padding:6px!important;justify-content:space-between;gap:4px}
+  .bnav button{flex:0 0 48px;width:48px;height:48px;min-height:48px;padding:0;border-radius:50%;justify-content:center;align-items:center}
+  .bnav .nind{border-radius:50%!important}
 
   /* Menu pill floats over the page (no separate strip): content runs to the bottom of the screen and
      scrolls behind the pill, which is translucent frosted glass */
