@@ -343,7 +343,9 @@ Deno.serve(async req => {
     }
     if (body.action === "disconnect") {
       const { data: refresh } = await db.rpc("mail_link_delete", { p_owner: user.id });
-      if (refresh) await fetch("https://oauth2.googleapis.com/revoke?token=" + encodeURIComponent(refresh), { method: "POST" }).catch(() => {});
+      // Google Calendar shares the same Google grant: only revoke when nothing else uses it
+      let other: any = null; try { other = (await db.rpc("google_links", { p_owner: user.id })).data; } catch {}
+      if (refresh && !other?.cal) await fetch("https://oauth2.googleapis.com/revoke?token=" + encodeURIComponent(refresh), { method: "POST" }).catch(() => {});
       return json({ ok: true });
     }
     return json({ error: "unknown action" }, 400);

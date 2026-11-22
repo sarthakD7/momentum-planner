@@ -2,8 +2,8 @@
 // Pages and app files: network first, cached copy when offline.
 // Libraries and fonts from CDNs: cached copy first.
 // Supabase API traffic is never cached (sync handles offline data itself).
-const VERSION = "mp-v29";
-const SHELL = ["./", "index.html", "boot.js", "supa-db.js", "notify.js", "ai.js", "mail.js", "bars.js", "look.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
+const VERSION = "mp-v30";
+const SHELL = ["./", "index.html", "boot.js", "supa-db.js", "notify.js", "ai.js", "mail.js", "bars.js", "look.js", "gcal.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 // Reminders sent by the notify server
 self.addEventListener("push", e => {

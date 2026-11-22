@@ -1673,6 +1673,7 @@ async function initCal() {
   else C.status = "need";
   renderCal();
 }
+const calLive = () => !!C.mcp && !["need", "off", "denied"].includes(C.status);
 const withCal = (cal, input) => cal.id === "primary" ? input : { calendarId: cal.id, ...input };
 const weekInput = day => { const w = weekStart(day); return { startTime: `${w}T00:00:00`, endTime: `${addDays(w, 7)}T00:00:00`, orderBy: "startTime", pageSize: 250 }; };
 const upInput = () => ({ startTime: `${today()}T00:00:00`, endTime: `${addDays(today(), 14)}T00:00:00`, orderBy: "startTime", pageSize: 250 });
@@ -1711,8 +1712,8 @@ function calError(e) {
   const code = e && e.code;
   const retract = () => { C.dayMap.clear(); C.upMap.clear(); mergeEvents(); };
   if (code === "approval_required" || code === "not_in_manifest" || code === "consent_required") { C.status = "need"; retract(); stopWatches(); }
-  else if (code === "needs_reauth") { C.status = "err"; C.msg = "Reconnect Google Calendar in claude.ai Settings → Connectors"; retract(); }
-  else if (code === "server_not_connected" || code === "server_not_found" || code === "selection_required") { C.status = "err"; C.msg = "Add Google Calendar in claude.ai Settings → Connectors"; retract(); }
+  else if (code === "needs_reauth") { C.status = "err"; C.msg = "Google Calendar needs reconnecting: Settings → Calendar"; retract(); }
+  else if (code === "server_not_connected" || code === "server_not_found" || code === "selection_required") { C.status = "err"; C.msg = "Connect Google Calendar in Settings → Calendar"; retract(); }
   else if (code === "blocked_by_policy") { C.status = "err"; C.msg = "Google Calendar is blocked by your organization"; retract(); }
   else if (code === "not_granted" || code === "capability_disabled" || code === "capability_removed") { C.status = "off"; retract(); }
   else { C.stale = true; if (C.status !== "on") { C.status = "err"; C.msg = "Google Calendar didn't respond. It will try again shortly."; } }
@@ -1784,7 +1785,7 @@ function renderEvents() {
   const wEnd = addDays(t, 7), wk = list.filter(e => e.sDate < wEnd);
   $("#evWeek").innerHTML = C.upMap.size ? `Next 7 days: <b style="color:var(--ink)">${wk.length} event${wk.length === 1 ? "" : "s"}</b>${wk.filter(e => e.src === "outlook").length ? `, ${wk.filter(e => e.src === "outlook").length} from Outlook` : ""}. Switch the timeline to <b style="color:var(--ink)">Week</b> to see them laid out.` : "";
   document.querySelectorAll("[data-evf]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.evf === C.evFilter)));
-  if (!C.mcp || C.status === "off") { box.innerHTML = `<div class="empty">Events appear here when this page is open in claude.ai with the Google Calendar connector added.</div>`; return; }
+  if (!C.mcp || C.status === "off") { box.innerHTML = `<div class="empty">Sign in to sync, then connect Google Calendar in Settings → Calendar to see your events here.</div>`; return; }
   if (C.status === "need" || C.status === "denied") { box.innerHTML = `<div class="empty">Allow Google Calendar to see your Outlook and Google events here.</div><button class="calbtn" data-act="${C.status === "need" ? "cal-connect" : "cal-manage"}" style="align-self:flex-start">Show calendars</button>`; return; }
   if (!set().calRead) { box.innerHTML = `<div class="empty">Calendar events are turned off in Settings.</div>`; return; }
   if (C.status === "err") { box.innerHTML = `<div class="empty">${esc(C.msg)}</div>`; return; }
@@ -1835,14 +1836,14 @@ const calQ = new Map();
 function cq(id, fn) { const p = (calQ.get(id) || Promise.resolve()).then(fn).catch(e => console.error(e)); calQ.set(id, p); return p; }
 function calErrText(e) {
   const c = e && e.code;
-  if (c === "approval_required" || c === "not_in_manifest" || c === "consent_required") return "Allow Google Calendar for this page to send tasks to it.";
-  if (c === "needs_reauth") return "Reconnect Google Calendar in claude.ai Settings → Connectors.";
-  if (c === "server_not_connected" || c === "selection_required") return "Add Google Calendar in claude.ai Settings → Connectors.";
+  if (c === "approval_required" || c === "not_in_manifest" || c === "consent_required") return "Connect Google Calendar in Settings → Calendar first.";
+  if (c === "needs_reauth") return "Google Calendar needs reconnecting: Settings → Calendar.";
+  if (c === "server_not_connected" || c === "selection_required") return "Connect Google Calendar in Settings → Calendar.";
   if (c === "server_unavailable" || c === "upstream_error") return "Google Calendar didn't confirm. Check it before retrying.";
   return "Couldn't update Google Calendar.";
 }
 function calSync(id) {
-  if (!C.mcp) return;
+  if (!calLive()) return;
   const t = state.tasks.get(id); if (!t) return;
   const want = calWanted(t);
   if (!want && !t.gcalId) return;
@@ -1881,7 +1882,7 @@ function calSync(id) {
   });
 }
 function calDelete(t) {
-  if (!C.mcp || !t.gcalId) return;
+  if (!calLive() || !t.gcalId) return;
   cq(t.id, async () => {
     try { await C.mcp.callTool(CAL, "delete_event", { eventId: t.gcalId, notificationLevel: "NONE" }); C.mcp.invalidate(CAL, "list_events").catch(() => {}); }
     catch (e) { toast(calErrText(e)); }
@@ -2170,9 +2171,9 @@ function schedText(sc) {
   const ds = [...sc.days].sort(), days = ds.length === 7 ? "Every day" : ds.join() === "1,2,3,4,5" ? "Weekdays" : ds.join() === "1,2,3,4,5,6" ? "Mon–Sat" : ds.map(x => WD[x]).join(", ");
   return `${days} · ${fmtMin(sc.start)}–${fmtMin(sc.start + sc.dur)}${sc.before || sc.after ? ` (+${(sc.before || 0) + (sc.after || 0)}m travel)` : ""}`;
 }
-const habSig = h => { const sc = hSched(h); return sc && h.remind !== false ? [sc.days.join(""), sc.start, sc.dur, sc.before || 0, sc.after || 0, h.remindMin ?? 15, h.name].join("|") : ""; };
+const habSig = h => { const sc = hSched(h); return sc && h.remind !== false && set().calHabits ? [sc.days.join(""), sc.start, sc.dur, sc.before || 0, sc.after || 0, h.remindMin ?? 15, h.name].join("|") : ""; };
 function habitCalSync(id) {
-  if (!C.mcp) return;
+  if (!calLive()) return;
   const h = state.habits.get(id); if (!h) return;
   const sig = habSig(h);
   if (!sig && !h.gcalId) return;
@@ -2198,7 +2199,7 @@ function habitCalSync(id) {
     } catch (e) { toast(calErrText(e)); }
   });
 }
-function habitCalDelete(h) { if (C.mcp && h && h.gcalId) cq("h:" + h.id, async () => { try { await C.mcp.callTool(CAL, "delete_event", { eventId: h.gcalId, notificationLevel: "NONE" }); C.mcp.invalidate(CAL, "list_events").catch(() => {}); } catch (e) { toast(calErrText(e)); } }); }
+function habitCalDelete(h) { if (calLive() && h && h.gcalId) cq("h:" + h.id, async () => { try { await C.mcp.callTool(CAL, "delete_event", { eventId: h.gcalId, notificationLevel: "NONE" }); C.mcp.invalidate(CAL, "list_events").catch(() => {}); } catch (e) { toast(calErrText(e)); } }); }
 function syncAllHabits() { [...state.habits.values()].forEach(h => habitCalSync(h.id)); }
 /* ---------- render ---------- */
 let renderPending = false;
@@ -4075,7 +4076,7 @@ function openTaskSheet(id, preset = {}) {
   if (!t) return;
   let subs = (t.subtasks || []).map(s => ({ ...s }));
   const durs = DUR_OPTS.slice(); if (!durs.includes(t.dur || 30)) durs.push(t.dur);
-  const calOk = !!C.mcp && C.status !== "off";
+  const calOk = calLive();
   $("#sheetRoot").innerHTML = `<div class="scrim" data-act="scrim"><form class="sheet" id="taskForm" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h2 id="sheetTitle">${id ? "Edit task" : "New task"}</h2>
     <label class="field">Task<input id="tfTitle" value="${esc(t.title)}" required autocomplete="off"></label>
@@ -4266,11 +4267,12 @@ function openSettingsSheet(section) {
           ${grp("Rewards", "Treats you unlock when you reach a level.", `<div class="subs" id="sRw"></div><div class="chiprow" id="sRwSug">${REWARD_SUGGESTIONS.map(r => `<button type="button" data-rw="${esc(r)}">+ ${esc(r)}</button>`).join("")}</div>`)}
           ${grp("Quotes", "Sources for the Coach card.", `<div class="chiprow" id="sQcats">${QCATS.map(([k, l]) => `<button type="button" data-qc="${k}" aria-pressed="${(s.quoteCats || []).includes(k)}">${l}</button>`).join("")}</div><label class="field">Your own quotes<textarea id="sMyQ" placeholder="One per line, e.g.  Do it now — Me">${esc((s.myQuotes || []).map(q => q.a ? `${q.t} — ${q.a}` : q.t).join("\n"))}</textarea></label>`)}
         </section>
-        <section class="setpane" data-pane="calendar" role="tabpanel">
-          ${calOk ? grp("Showing events", "", `<label class="check"><input type="checkbox" id="sCalRead"${s.calRead ? " checked" : ""}><span>Show my events on the timeline</span></label>`) +
+        <section class="setpane" data-pane="calendar" role="tabpanel"><div id="mpCal" style="display:flex;flex-direction:column;gap:inherit"></div>
+          ${calOk && C.status !== "need" ? grp("Showing events", "", `<label class="check"><input type="checkbox" id="sCalRead"${s.calRead ? " checked" : ""}><span>Show my events on the timeline</span></label>`) +
             grp("Calendars", "Mark your Outlook feed as “Outlook” so its events get their own color and filter.", `<div id="calPick"></div>`) +
-            grp("Sending tasks", "", `<label class="check"><input type="checkbox" id="sCalPush"${s.calPushAll ? " checked" : ""}><span>Add every time-boxed task to Google Calendar<small>You can still switch it off for a single task. Applies to tasks you schedule or change from now on.</small></span></label>`)
-          : grp("Google Calendar", "", `<div class="note">Available when this page is open in claude.ai with the Google Calendar connector added.</div>`)}
+            grp("Sending tasks", "", `<label class="check"><input type="checkbox" id="sCalPush"${s.calPushAll ? " checked" : ""}><span>Add every time-boxed task to Google Calendar<small>You can still switch it off for a single task. Applies to tasks you schedule or change from now on.</small></span></label>
+              <label class="check"><input type="checkbox" id="sCalHab"${s.calHabits ? " checked" : ""}><span>Add habits with a set time to Google Calendar<small>As repeating events with their own popup reminder. Off by default, because reminders from this app already cover them.</small></span></label>`)
+          : ""}
         </section>
       </div>
     </div>
@@ -4278,9 +4280,9 @@ function openSettingsSheet(section) {
   </form></div>`;
   const showPane = k => { document.querySelectorAll(".setnav [data-pane]").forEach(x => x.setAttribute("aria-selected", String(x.dataset.pane === k))); document.querySelectorAll(".setpane").forEach(x => x.hidden = x.dataset.pane !== k); try { localStorage.setItem(LS + "-setpane", k); } catch {} };
   showPane(pane);
-  if (window.mpNotify) window.mpNotify.render(document.getElementById("mpNotify"));
-  if (window.mpAI) window.mpAI.render(document.getElementById("mpAI"));
-  if (window.mpMail) window.mpMail.render(document.getElementById("mpMail"));
+  // each settings module renders on its own: one failing (e.g. signed out) mustn't blank the others
+  [["mpNotify", "mpNotify"], ["mpAI", "mpAI"], ["mpMail", "mpMail"], ["mpCal", "mpCal"]].forEach(([mod, id]) => {
+    try { const m = window[mod]; if (m && typeof m.render === "function") Promise.resolve(m.render(document.getElementById(id))).catch(e => console.warn(mod, e)); } catch (e) { console.warn(mod, e); } });
   let brs = (s.breaks || []).map(b => ({ ...b }));
   const drawBr = () => { $("#sBrList").innerHTML = breaksHTML(brs); };
   drawBr();
@@ -4331,7 +4333,7 @@ function openSettingsSheet(section) {
     const myQ = $("#sMyQ").value.split("\n").map(l => l.trim()).filter(Boolean).slice(0, 50).map(l => { const m = l.split(/\s+[—–-]\s+/); return m.length > 1 ? { t: m.slice(0, -1).join(" — ").replace(/^["“]|["”]$/g, ""), a: m[m.length - 1] } : { t: l.replace(/^["“]|["”]$/g, ""), a: "" }; });
     const rwList = ($("#setForm")._rws ? $("#setForm")._rws() : []).filter(r => r.title && r.title.trim()).map(r => ({ title: r.title.trim().slice(0, 60), level: clamp(+r.level || 2, 2, 40) }));
     const next = { ...set(), aiTidy: $("#sTidy").checked, hoverFx: $("#sFx").checked, gamOn: $("#sGam").checked, quoteCats: qc, myQuotes: myQ, rewards: rwList, dayStart: a, dayEnd: b, showWork: $("#sShowWork").checked, workStart: ws, workEnd: we, focusTarget: clamp(Math.round(+$("#sTarget").value || 120), 15, 600) };
-    if ($("#sCalRead")) { next.calRead = $("#sCalRead").checked; next.calPushAll = $("#sCalPush").checked; }
+    if ($("#sCalRead")) { next.calRead = $("#sCalRead").checked; next.calPushAll = $("#sCalPush").checked; if ($("#sCalHab") && !!next.calHabits !== $("#sCalHab").checked) { next.calHabits = $("#sCalHab").checked; setTimeout(syncAllHabits, 300); } }
     const picks = [...document.querySelectorAll("#calPick [data-cal]")];
     if (picks.length) {
       const chosen = picks.filter(x => x.checked).map(x => ({ id: x.dataset.cal, name: x.dataset.name === "Primary calendar" ? "Google" : x.dataset.name, src: document.querySelector(`[data-calsrc="${CSS.escape(x.dataset.cal)}"]`).value }));
@@ -4654,7 +4656,7 @@ function bindUI() {
     else if (act === "habit-edit") openHabitSheet(id);
     else if (act === "close") closeSheet();
     else if (act === "scrim" && e.target === a) closeSheet();
-    else if (act === "cal-connect") connectCal();
+    else if (act === "cal-connect") { if (C.perms && C.perms.connect) C.perms.connect(); else connectCal(); }
     else if (act === "tile") { if (!DASH.edit) tileGo(a.dataset.go); }
     else if (act === "dash-edit") { DASH.edit = true; renderStats(); }
     else if (act === "dash-done") { DASH.edit = false; renderStats(); toast("Dashboard layout saved."); }
@@ -4739,7 +4741,7 @@ function bindUI() {
     else if (act === "edit-cols") openColumnsSheet();
     else if (act === "toggle-done") { state.showDone = !state.showDone; renderWorkspace(); }
     else if (act === "ws-back") { state.showTree = true; renderWorkspace(); }
-    else if (act === "cal-manage") { if (C.perms) C.perms.manage().then(initCal).catch(() => toast("Open this artifact's Permissions menu to allow Google Calendar.")); }
+    else if (act === "cal-manage") { if (C.perms) Promise.resolve(C.perms.manage()).catch(() => toast("Couldn't open Google sign-in. Try Settings → Calendar.")); }
     else if (act === "overdue-today") { const t0 = state.today; let o = maxOrder(allTasks().filter(x => x.date === t0)); allTasks().filter(x => x.date && x.date < t0 && !(x.done || x.skipped)).forEach(x => putTask({ ...x, date: t0, start: null, order: ++o })); toast("Overdue tasks moved to today."); }
     else if (act === "clear-examples") { allTasks().filter(t => t.example).forEach(t => delTask(t.id)); [...state.habits.values()].filter(h => h.example).forEach(h => delHabit(h.id)); [...state.pages.values()].filter(p => p.example).forEach(p => deletePageCascade(p.id)); toast("Examples cleared. The planner is yours."); }
   });

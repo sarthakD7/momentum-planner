@@ -7,7 +7,7 @@
   const LIB = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
   const scriptSrc = document.currentScript && document.currentScript.src;
-  window.mpVersion = "mp-v29";   // keep in step with VERSION in sw.js; shown in Settings → Reminders → Account
+  window.mpVersion = "mp-v30";   // keep in step with VERSION in sw.js; shown in Settings → Reminders → Account
   let resolveDb, rejectDb;
   const dbReady = new Promise((res, rej) => { resolveDb = res; rejectDb = rej; });
   // Stand-in for claude.ai's "downloads" capability: saves a file through the browser.
@@ -26,7 +26,10 @@
   import(new URL("look.js", scriptSrc || location.href).href).catch(e => console.error("Look module failed", e));
   const aiMod = import(new URL("ai.js", scriptSrc || location.href).href).catch(e => { console.error("AI module failed", e); return null; });
   const sample = async () => { const m = await aiMod; return m && m.configured() ? m.sampler : null; };
-  window.claude = { use: async name => (name === "db" ? dbReady : name === "downloads" ? downloads : name === "sample" ? sample() : null) };
+  // Stand-in for claude.ai's Google Calendar connector: the gcal module (only when signed in to sync)
+  const gcalMod = import(new URL("gcal.js", scriptSrc || location.href).href).catch(e => { console.error("Calendar module failed", e); return null; });
+  const cal = key => dbReady.then(async db => { const m = db && window.mpSupabase ? await gcalMod : null; return m ? m[key] : null; });
+  window.claude = { use: async name => (name === "db" ? dbReady : name === "downloads" ? downloads : name === "sample" ? sample() : name === "mcp" ? cal("mcp") : name === "permissions" ? cal("perms") : null) };
 
   const css = `
   .mp-auth{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:rgba(8,12,18,.55);padding:16px;font-family:Manrope,system-ui,sans-serif}
