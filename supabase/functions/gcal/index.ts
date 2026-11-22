@@ -135,9 +135,12 @@ Deno.serve(async req => {
     if (body.action === "start") {
       if (!ready) return json({ error: "Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Supabase secrets first." }, 400);
       const { data: state } = await db.rpc("mail_state_create", { p_owner: user.id });
+      // A Personal-mode Google client only lets its creator in: suggest the Google account already used for the
+      // email scan (that one works), never the planner's sign-in email, and always show Google's account picker.
+      let hint = ""; try { hint = ((await db.rpc("mail_link_status", { p_owner: user.id })).data || {}).email || ""; } catch {}
       const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-      u.search = new URLSearchParams({ client_id: G_ID, redirect_uri: REDIRECT, response_type: "code", access_type: "offline", prompt: "consent",
-        scope: SCOPES, state, include_granted_scopes: "true", ...(body.hint ? { login_hint: String(body.hint) } : {}) }).toString();
+      u.search = new URLSearchParams({ client_id: G_ID, redirect_uri: REDIRECT, response_type: "code", access_type: "offline", prompt: "select_account consent",
+        scope: SCOPES, state, include_granted_scopes: "true", ...(hint ? { login_hint: hint } : {}) }).toString();
       return json({ url: u.toString() });
     }
     if (body.action === "disconnect") {

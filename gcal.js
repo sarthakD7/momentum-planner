@@ -25,8 +25,7 @@ async function getStatus(force) {
 async function connect() {
   const s = await getStatus(true);
   if (!s.ready) { alert("Google sign-in isn't set up on the server yet (Settings → Calendar shows what's missing)."); return; }
-  const { data: { user } } = await sb().auth.getUser();
-  const r = await fn("start", { hint: user?.email || "" });
+  const r = await fn("start");
   if (r && r.url) location.assign(r.url);
 }
 
@@ -85,7 +84,7 @@ async function render(el) {
          <div class="chiprow"><button type="button" class="btn" data-gc="refresh">Refresh now</button><button type="button" class="btn danger" data-gc="off">Disconnect</button></div>`
       : `<div class="note">See your Google Calendar events (and an Outlook calendar subscribed in Google) on the timeline and in the Brief, and optionally send time-boxed tasks to your calendar.</div>
          <div class="chiprow"><button type="button" class="btn primary" data-gc="on" style="flex:none">Connect Google Calendar</button></div>
-         <div class="note" style="font-size:12px">Google will ask to let Momentum Planner see and edit calendar events. Nothing is added to your calendar unless you turn on sending below or per task.</div>`;
+         <div class="note" style="font-size:12px">On Google's screen, pick the Google account that set up this app's Google sign-in (the one used for Email scan); Google blocks other accounts. Then allow calendar access. Nothing is added to your calendar unless you turn on sending below or per task.</div>`;
   el.innerHTML = `<div class="sgroup"><div class="sgh"><b>Google Calendar</b></div>${body}<div class="note" id="gcMsg" style="margin:0"></div></div>`;
   el.onclick = async e => {
     const b = e.target.closest("[data-gc]"); if (!b) return;
