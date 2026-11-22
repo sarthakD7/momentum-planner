@@ -794,12 +794,34 @@ select:disabled{opacity:.55;cursor:default}
 .setfoot{padding:12px 18px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);align-items:center}
 .setfoot .note{max-width:260px}
 :root[data-style="glass"] .sgroup{background:var(--g-card);border-color:var(--g-edge)}
+.setnav small,.setback{display:none}
+/* More menu: a grid of tiles that grows out of the More button */
+.moresheet{padding:14px!important}
+.moregrid{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+.moregrid .mtile{flex:0 0 calc((100% - 20px) / 3)}
+.mtile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px 6px 14px;border-radius:22px;border:1px solid color-mix(in srgb,var(--line) 70%,transparent);
+  background:color-mix(in srgb,var(--surface-2) 75%,transparent);color:var(--ink);font:700 13px var(--f-body,inherit);transition:transform .2s cubic-bezier(.32,.72,0,1),background .2s}
+.mtile i{display:grid;place-items:center;width:46px;height:46px;border-radius:50%;background:var(--accent-soft);color:var(--accent)}
+.mtile[aria-pressed="true"]{border-color:color-mix(in srgb,var(--accent) 45%,transparent);background:color-mix(in srgb,var(--accent) 14%,var(--surface-2))}
+.mtile:active{transform:scale(.95)}
 @media (max-width:640px){
-  .setsheet{max-height:92vh}
-  .setbody{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
-  .setnav{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}
-  .setnav button{flex:none;padding:8px 12px}
-  .setpanes{padding:12px}
+  /* phones: fixed height (no jumping between sections); a list of sections, then one section with a back arrow */
+  .setsheet{height:92vh;max-height:92vh}
+  .setbody{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr);border-top:0}
+  .sethead{padding:14px 14px 10px;gap:8px;justify-content:flex-start}
+  .sethead h2{flex:1;margin:0}
+  .setsheet.inpane .setback{display:inline-flex;align-items:center;justify-content:center;font-size:26px;width:38px;height:38px;padding:0;margin-left:-4px}
+  .setsheet:not(.inpane) .setpanes{display:none}
+  .setsheet.inpane .setnav{display:none}
+  .setnav{flex-direction:column;overflow-y:auto;overflow-x:hidden;border:0;padding:4px 14px 18px;gap:8px}
+  .setnav button{flex:none;padding:12px 14px;gap:14px;border-radius:18px;background:color-mix(in srgb,var(--surface-2) 80%,transparent);border:1px solid color-mix(in srgb,var(--line) 70%,transparent);color:var(--ink);font-size:15px;align-items:center}
+  .setnav button[aria-selected="true"]{background:color-mix(in srgb,var(--surface-2) 80%,transparent);color:var(--ink)}
+  .setnav button .ic{flex:none;width:40px;height:40px;padding:10px;box-sizing:border-box;border-radius:13px;background:var(--accent-soft);color:var(--accent)}
+  .setnav button>span{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+  .setnav small{display:block;font-size:12px;font-weight:500;color:var(--muted);line-height:1.35}
+  .setnav button::after{content:"›";font-size:22px;line-height:1;color:var(--muted);margin-left:4px}
+  .setpanes{padding:4px 14px 16px}
+  .setpane{gap:14px}
   .setfoot .note{display:none}
 }
 
@@ -2508,7 +2530,8 @@ function bindNavGlow() {
   rail.addEventListener("focusout", hide); rail.addEventListener("click", hide); rail.addEventListener("scroll", hide);
 }
 function openMoreSheet() {
-  $("#sheetRoot").innerHTML = `<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="More"><h2>More</h2><div class="dlist">${MODES.filter(m => !PHONE_MAIN.includes(m[0])).map(([m, l, i]) => `<button class="dpg" data-act="go-mode" data-m="${m}">${ic(i, 18)}<span class="pt">${l}</span></button>`).join("")}<button class="dpg" data-act="open-settings">${ic("gear", 18)}<span class="pt">Settings</span></button></div></div></div>`;
+  const tile = (act, m, l, i) => `<button type="button" class="mtile" data-act="${act}"${m ? ` data-m="${m}" aria-pressed="${state.mode === m}"` : ""}><i>${ic(i, 22)}</i><span>${l}</span></button>`;
+  $("#sheetRoot").innerHTML = `<div class="scrim" data-act="scrim"><div class="sheet moresheet" role="dialog" aria-modal="true" aria-label="More"><div class="moregrid">${MODES.filter(m => !PHONE_MAIN.includes(m[0])).map(([m, l, i]) => tile("go-mode", m, l, i)).join("")}${tile("open-settings", "", "Settings", "gear")}</div></div></div>`;
 }
 function setMode(m) {
   state.mode = m; try { localStorage.setItem(LS + "-mode", m); } catch {}
@@ -4220,15 +4243,16 @@ function openMomentumSheet() {
 function openSettingsSheet(section) {
   const s = set(), calOk = !!C.mcp && C.status !== "off";
   let hrs = ""; for (let h = 0; h <= 24; h++) hrs += `<option value="${h}">${h === 24 ? "12am (midnight)" : fmtMin(h*60)}</option>`;
+  const PDESC = { appearance: "Mode, style, background, transparency", day: "Adding tasks, timeline, work hours, focus target", routine: "Daily routine and wake-up", breaks: "Breaks and vacations", motivation: "XP, levels, rewards, quotes", calendar: "Google Calendar events and sending tasks", notify: "Reminders, habit nudges, account", mail: "Find meetings and deadlines in Gmail", ai: "AI provider for planning help", data: "Backups, import, trash, shortcuts" };
   const PANES = [["appearance", "Appearance", "palette"], ["day", "Day & focus", "clock"], ["routine", "Routine", "sun"], ["breaks", "Breaks", "plan"], ["motivation", "Motivation", "flame"], ["calendar", "Calendar", "events"], ["notify", "Reminders", "alert"], ["mail", "Email scan", "inbox"], ["ai", "AI", "ai"], ["data", "Data", "folder"]];
   const secMap = { theme: "appearance", layout: "day", momentum: "day", motivation: "motivation", calendar: "calendar" };
   let pane = secMap[section] || section || (() => { try { return localStorage.getItem(LS + "-setpane"); } catch { return null; } })() || "appearance";
   if (!PANES.some(p => p[0] === pane)) pane = "appearance";
   const grp = (title, desc, body) => `<div class="sgroup"><div class="sgh"><b>${title}</b>${desc ? `<span>${desc}</span>` : ""}</div>${body}</div>`;
   $("#sheetRoot").innerHTML = `<div class="scrim" data-act="scrim"><form class="sheet setsheet" id="setForm" role="dialog" aria-modal="true" aria-labelledby="stTitle">
-    <div class="sethead"><h2 id="stTitle">Settings</h2><button type="button" class="iconbtn" data-act="close" aria-label="Close">×</button></div>
+    <div class="sethead"><button type="button" class="iconbtn setback" aria-label="Back to all settings">‹</button><h2 id="stTitle">Settings</h2><button type="button" class="iconbtn" data-act="close" aria-label="Close">×</button></div>
     <div class="setbody">
-      <nav class="setnav" role="tablist" aria-label="Settings sections">${PANES.map(([k, l, i]) => `<button type="button" role="tab" data-pane="${k}" aria-selected="${k === pane}">${ic(i, 16)}<span>${l}</span></button>`).join("")}</nav>
+      <nav class="setnav" role="tablist" aria-label="Settings sections">${PANES.map(([k, l, i]) => `<button type="button" role="tab" data-pane="${k}" aria-selected="${k === pane}">${ic(i, 16)}<span>${l}<small>${PDESC[k] || ""}</small></span></button>`).join("")}</nav>
       <div class="setpanes">
         <section class="setpane" data-pane="appearance" role="tabpanel">
           ${grp("Mode", "Auto matches your device (or claude.ai) setting.", `<div class="seg modepick" role="radiogroup" aria-label="Light or dark mode">${[["auto", "Auto", "device"], ["light", "Light", "sun"], ["dark", "Dark", "moon"]].map(([k, l, i]) => `<button type="button" role="radio" data-scheme="${k}" aria-checked="${(s.scheme || "auto") === k}" aria-pressed="${(s.scheme || "auto") === k}">${ic(i, 15)}${l}</button>`).join("")}</div>`)}
@@ -4279,7 +4303,12 @@ function openSettingsSheet(section) {
     <div class="sheetbtns setfoot"><span class="note">Appearance changes apply right away. Save applies the rest.</span><span class="spacer"></span><button type="button" class="btn" data-act="close">Cancel</button><button type="submit" class="btn primary" style="flex:none">Save</button></div>
   </form></div>`;
   const showPane = k => { document.querySelectorAll(".setnav [data-pane]").forEach(x => x.setAttribute("aria-selected", String(x.dataset.pane === k))); document.querySelectorAll(".setpane").forEach(x => x.hidden = x.dataset.pane !== k); try { localStorage.setItem(LS + "-setpane", k); } catch {} };
+  // phones: a list of sections first, then one section at a time with a back arrow
+  const setEl = $("#setForm"), phoneSet = () => matchMedia("(max-width:640px)").matches;
+  const openPane = k => { showPane(k); setEl.classList.add("inpane"); $("#stTitle").textContent = (PANES.find(p => p[0] === k) || [, "Settings"])[1]; const sp = setEl.querySelector(".setpanes"); if (sp) sp.scrollTop = 0; };
+  setEl.querySelector(".setback").addEventListener("click", () => { setEl.classList.remove("inpane"); $("#stTitle").textContent = "Settings"; });
   showPane(pane);
+  if (phoneSet() && section) openPane(pane);
   // each settings module renders on its own: one failing (e.g. signed out) mustn't blank the others
   [["mpNotify", "mpNotify"], ["mpAI", "mpAI"], ["mpMail", "mpMail"], ["mpCal", "mpCal"]].forEach(([mod, id]) => {
     try { const m = window[mod]; if (m && typeof m.render === "function") Promise.resolve(m.render(document.getElementById(id))).catch(e => console.warn(mod, e)); } catch (e) { console.warn(mod, e); } });
@@ -4300,7 +4329,7 @@ function openSettingsSheet(section) {
   });
   drawTrash(); drawBackups(); drawRoutineEditor(); bindRoutineEditor(); bindSceneUI();
   $("#sImpGo").addEventListener("click", () => { const f = $("#sImpFile").files[0]; if (!f) { toast("Choose a backup file first."); return; } importBackup(f, $("#sImpSet").checked); });
-  $(".setnav").addEventListener("click", e => { const t = e.target.closest("[data-pane]"); if (t) showPane(t.dataset.pane); });
+  $(".setnav").addEventListener("click", e => { const t = e.target.closest("[data-pane]"); if (t) (phoneSet() ? openPane : showPane)(t.dataset.pane); });
   $("#sDayStart").value = s.dayStart; $("#sDayEnd").value = s.dayEnd;
   if ($("#calPick")) openCalendarPicker($("#calPick"));
   const curLvl = levelOf(xpReport().total).n;

@@ -44,6 +44,9 @@ body:not([data-view="stats"]) .acct{display:none}
   .scrim.pillpop[data-from="searchBtn"]{justify-content:center;padding-inline:16px}
   .scrim.pillpop:is([data-from="momBtn"],[data-from="lvlBtn"]){justify-content:flex-end;padding-left:16px;padding-right:var(--popR,16px)}
 }
+/* More menu: grows up out of the More button and sits just above the dock */
+.scrim.pillpop[data-from="moreBtn"]{align-items:flex-end!important;justify-content:center!important;padding:8px max(12px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 86px) max(12px,env(safe-area-inset-left,0px))!important}
+.scrim.pillpop[data-from="moreBtn"]>.sheet{width:100%!important;max-width:460px;align-self:flex-end!important;border-radius:30px!important}
 /* no background blur behind pills and sheets: it switched on and off in one jump (flicker) and slowed the animations; a plain dim instead */
 .scrim{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 :root[data-style="glass"] .scrim:not(.pillpop){background:rgba(10,14,24,.36)}
@@ -201,7 +204,7 @@ function openAccount() {
 
 /* ---------- 3. expanding pill ---------- */
 let origin = null;   // { rect, at } of the button just tapped
-const POP_IDS = ["searchBtn", "momBtn", "lvlBtn", "acctBtn"];
+const POP_IDS = ["searchBtn", "momBtn", "lvlBtn", "acctBtn", "moreBtn"];
 document.addEventListener("click", e => {
   const b = e.target.closest && e.target.closest(POP_IDS.map(i => "#" + i).join(","));
   if (b) origin = { rect: b.getBoundingClientRect(), at: Date.now(), id: b.id };
