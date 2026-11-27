@@ -2071,7 +2071,7 @@ function logWake(m, d = today()) {
   const prevLog = (state.wakeLog || {})[d];
   const planned = routineFor(d, true), res = refitMorning(planned, m, set().refitStyle || "smart");
   putWake(d, m);
-  if (!res.map) { toast(`Logged: up at ${fmtMin(m)}. You're on time, nothing to move.`); return; }
+  if (!res.map) { toast(wakeBlockOf(planned) ? `Logged: up at ${fmtMin(m)}. You're on time, nothing to move.` : `Logged: up at ${fmtMin(m)}.`); return; }
   const cut = Math.max(...planned.filter(b => b.start < 900 && b.kind === "meal").map(b => b.start), 0) || 810;
   const moved = [], unfit = [], undo = [];
   const pre = planned.filter(b => b.start < cut), split = [];
@@ -2115,7 +2115,7 @@ function openWakeSheet(auto) {
   const planned = (wakeBlockOf(routineFor(today(), true)) || {}).start;
   $("#sheetRoot").innerHTML = `<div class="scrim" data-act="scrim"><form class="sheet" id="wakeForm" role="dialog" aria-modal="true" aria-labelledby="wkT" style="width:min(420px,100%)">
     <h2 id="wkT">${auto ? "Good morning!" : "Log wake-up time"}</h2>
-    <p class="note" style="margin:-6px 0 0">When did you wake up? ${planned != null ? `Your plan was ${fmtMin(planned)}. ` : ""}If you're late, the morning blocks re-fit before lunch and their tasks move with them.</p>
+    <p class="note" style="margin:-6px 0 0">When did you wake up? ${planned != null ? `Your plan was ${fmtMin(planned)}. If you're late, the morning blocks re-fit before lunch and their tasks move with them.` : "It's added to your wake-up history (also in Review)."}</p>
     <label class="field">Woke up at<input type="time" id="wkTime" step="300" value="${hhmm(cur ?? m)}"></label>
     <div class="chiprow">${[-60, -30, -15].map(x => `<button type="button" class="pillbtn" data-wk="${Math.max(0, m + x)}">${fmtMin(Math.max(0, m + x))}</button>`).join("")}<button type="button" class="pillbtn" data-wk="${m}">Just now</button></div>
     ${auto ? "" : `<div class="wkhist"><b>Last 14 days</b>${wakeTrendHTML(14)}</div>`}
@@ -3761,7 +3761,7 @@ function nowNextHTML() {
   const nextC = next ? `<div class="nnc"><span class="k">Next · ${src(next)}</span><span class="t">${esc(next.title)}</span><span class="m"><b>${rel(next.s)}</b>${next.loc ? " · " + esc(next.loc) : ""}</span><div class="acts">${acts(next)}</div></div>`
     : `<div class="nnc"><span class="k">Next</span><span class="t">Nothing else scheduled</span><span class="m">The next 7 days have no more time-boxed items.</span><div class="acts"><button data-act="nn-ai">${ic("ai", 14)}Plan with AI</button></div></div>`;
   const greet = hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening";
-  const wl = (state.wakeLog || {})[t], wakeBtn = routineOn(t) ? (wl != null ? `<button class="linkbtn wkchip" data-act="wake-log" title="Change wake-up time">☀ Up at ${fmtMin(wl)}</button>` : hr < 17 ? `<button class="btn wkbtn" data-act="wake-log">☀ I'm up</button>` : "") : "";
+  const wl = (state.wakeLog || {})[t], wakeBtn = wl != null ? `<button class="linkbtn wkchip" data-act="wake-log" title="Change wake-up time">☀ Up at ${fmtMin(wl)}</button>` : hr < 17 ? `<button class="btn wkbtn" data-act="wake-log">☀ I'm up</button>` : "";   // always available: the wake-up history works with or without a routine
   const idle = !now && !next && !routineNow();
   const slim = idle ? `<div class="nn-slim"><span><b>Free now</b> · nothing time-boxed in the next 7 days</span><div class="acts"><button data-act="nn-plan">${ic("plan", 14)}Plan</button><button data-act="nn-focus" data-id="">${ic("focus", 14)}Focus</button><button data-act="nn-ai">${ic("ai", 14)}AI</button></div></div>` : "";
   return `<article class="tile full" aria-label="Now and next"><div class="greet">${greet}${wakeBtn}<small><button class="linkbtn" data-act="datepick" style="font-size:13px;padding:0">${esc(dayLabel(t, { weekday: "long", day: "numeric", month: "long" }))} ▾</button></small></div><div class="nn${idle ? " nn-idle" : ""}">${nowC}${nextC}</div>${slim}</article>`;
